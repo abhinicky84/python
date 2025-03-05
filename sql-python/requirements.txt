@@ -1,0 +1,19 @@
+azure-core
+ azure-cosmos
+ certifi
+ chardet
+ charset-normalizer
+ click
+ colorama
+ distlib
+ filelock
+ idna
+ pip-upgrade
+ platformdirs
+ pur
+ requests
+ six
+ typing_extensions
+ urllib3
+ virtualenv
+ virtualenv-clone
