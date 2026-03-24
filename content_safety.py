@@ -237,7 +237,7 @@ if __name__ == "__main__":
 
     # Replace the placeholders with your own values
     endpoint = "https://e-us-test-ai-content-safety.cognitiveservices.azure.com/"
-    subscription_key = "8Xpjfv8AFOjmuaAMKiR0gzwd8SBhQyMwjn57d1lA0StlkhvG75c8JQQJ99BCACYeBjFXJ3w3AAAHACOGO3rv"
+    #subscription_key = "8Xpjfv8AFOjmuaAMKiR0gzwd8SBhQyMwjn57d1lA0StlkhvG75c8JQQJ99BCACYeBjFXJ3w3AAAHACOGO3rv"
     api_version = "2024-09-01"
 
     # Initialize the ContentSafety object
