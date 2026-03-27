@@ -21,4 +21,5 @@ Guidance:
 - Highlight identity, network boundaries, observability, resilience, and governance.
 - Avoid vague statements.
 - Assume the audience is enterprise architects, delivery leads, and platform owners.
+- Name the primary systems, Azure services, and integration layers explicitly so downstream diagram generation can map them reliably.
 """

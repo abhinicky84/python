@@ -22,6 +22,12 @@ class Settings:
     azure_client_id: str | None = os.getenv("AZURE_CLIENT_ID")
     azure_client_secret: str | None = os.getenv("AZURE_CLIENT_SECRET")
     azure_managed_identity_client_id: str | None = os.getenv("AZURE_MANAGED_IDENTITY_CLIENT_ID")
+    memory_backend: str = os.getenv("MEMORY_BACKEND", "none").lower()
+    memory_connection_string: str | None = os.getenv("MEMORY_CONNECTION_STRING")
+    memory_database_name: str = os.getenv("MEMORY_DATABASE_NAME", "enterprise-arch-agent")
+    memory_container_name: str = os.getenv("MEMORY_CONTAINER_NAME", "architecture-memory")
+    memory_table_name: str = os.getenv("MEMORY_TABLE_NAME", "ArchitectureMemory")
+    memory_blob_container_name: str = os.getenv("MEMORY_BLOB_CONTAINER_NAME", "architecture-memory")
 
     def validate_runtime(self) -> None:
         if not self.project_endpoint:
@@ -45,6 +51,8 @@ class Settings:
                     "Service principal auth is enabled but these variables are missing: "
                     + ", ".join(missing)
                 )
+        if self.memory_backend not in {"none", "cosmos", "table", "blob"}:
+            raise ValueError("MEMORY_BACKEND must be one of: none, cosmos, table, blob.")
 
 
 @lru_cache(maxsize=1)

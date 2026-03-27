@@ -7,6 +7,7 @@ A runnable starter project for an **Enterprise Architecture AI Agent** built wit
 - Azure AI Projects SDK
 - Azure Identity
 - Azure OpenAI-compatible responses API (through Azure AI Project client)
+- Azure Cosmos DB / Table Storage / Blob Storage support for agent memory
 - Docker
 
 ## What this agent does
@@ -26,6 +27,18 @@ It then returns a structured recommendation with:
 7. Non-Functional Requirements
 8. Risks & Assumptions
 9. Recommended Delivery Phases
+
+It also generates enterprise delivery artifacts:
+
+- Mermaid flow diagram
+- draw.io XML that can be imported into diagrams.net / draw.io
+
+It can also persist memory for:
+
+- architecture request history
+- reusable patterns
+- prior recommendations
+- versioned outputs
 
 ## Project structure
 
@@ -74,6 +87,8 @@ enterprise-arch-agent/
 - `app/api`: HTTP contract and route handlers
 - `app/agents`: AI agent orchestration and prompt assembly
 - `app/services`: infrastructure clients and external service integration
+- `app/services/diagram_generator.py`: Mermaid and draw.io XML generation from the architecture response
+- `app/services/memory_store.py`: persistence-backed agent memory using Cosmos DB, Table Storage, or Blob Storage
 - `app/domain`: enterprise architecture heuristics and analysis helpers
 - `app/schemas`: Pydantic request/response models
 - `app/core`: runtime configuration and logging bootstrap
@@ -132,6 +147,8 @@ Set:
 - `AZURE_TENANT_ID`
 - `AZURE_CLIENT_ID`
 - `AZURE_CLIENT_SECRET`
+- `MEMORY_BACKEND`
+- `MEMORY_CONNECTION_STRING`
 
 Example:
 
@@ -144,6 +161,9 @@ AZURE_AUTH_MODE=service_principal
 AZURE_TENANT_ID=<tenant-id>
 AZURE_CLIENT_ID=<client-id>
 AZURE_CLIENT_SECRET=<client-secret>
+MEMORY_BACKEND=blob
+MEMORY_CONNECTION_STRING=<azure-connection-string>
+MEMORY_BLOB_CONTAINER_NAME=architecture-memory
 ```
 
 ## 5. Run locally
@@ -165,6 +185,61 @@ Sample JSON for `POST /analyze`:
 {
   "prompt": "Create an enterprise architecture for a global retail company using AEM, Adobe Commerce, SAP S/4HANA, Salesforce, and Azure API Management. Include integrations, security, non-functional requirements, and phased roadmap."
 }
+```
+
+Sample response fields:
+
+```json
+{
+  "result": "...",
+  "detected_domains": "Adobe Experience Manager, eCommerce, ERP, CRM, API Integration, Global Platform, Retail Domain",
+  "suggested_azure_services": [
+    "Azure AI Foundry",
+    "Azure Container Apps",
+    "Azure Monitor",
+    "Azure API Management"
+  ],
+  "memory_record_id": "3ce3a640-0b2e-40f7-b0d7-a469b5f8e0c0",
+  "memory_backend": "blob",
+  "prior_recommendations": [
+    "Use API-led integration between commerce and ERP..."
+  ],
+  "reusable_patterns": [
+    "Synchronous APIs for customer-facing real-time interactions via Azure API Management"
+  ],
+  "mermaid_diagram": "flowchart LR\n    N1[\"Users / Channels\"]\n    ...",
+  "drawio_xml": "<mxfile host=\"app.diagrams.net\">...</mxfile>"
+}
+```
+
+## Agent memory backends
+
+Use `MEMORY_BACKEND` to choose how the agent stores history and versioned outputs:
+
+- `none`: disable persistence
+- `cosmos`: store records in Azure Cosmos DB
+- `table`: store records in Azure Table Storage
+- `blob`: store JSON files in Azure Blob Storage
+
+Example memory settings:
+
+```env
+MEMORY_BACKEND=cosmos
+MEMORY_CONNECTION_STRING=<cosmos-connection-string>
+MEMORY_DATABASE_NAME=enterprise-arch-agent
+MEMORY_CONTAINER_NAME=architecture-memory
+```
+
+```env
+MEMORY_BACKEND=table
+MEMORY_CONNECTION_STRING=<storage-account-connection-string>
+MEMORY_TABLE_NAME=ArchitectureMemory
+```
+
+```env
+MEMORY_BACKEND=blob
+MEMORY_CONNECTION_STRING=<storage-account-connection-string>
+MEMORY_BLOB_CONTAINER_NAME=architecture-memory
 ```
 
 ## Docker
@@ -213,8 +288,8 @@ curl -X POST "http://127.0.0.1:8000/analyze" \
 - For Docker, prefer `AZURE_AUTH_MODE=service_principal` unless the container is running on Azure with Managed Identity.
 - In Azure-hosted deployment, prefer **Managed Identity** and assign appropriate RBAC permissions to the Azure AI Project / resource.
 - This starter version uses internal Python helper tools for domain classification and Azure service suggestions.
+- This version also creates Mermaid and draw.io artifacts from the generated architecture narrative.
+- This version can also persist request and response history as agent memory using Cosmos DB, Table Storage, or Blob Storage.
 - A later version can add:
-  - Mermaid diagram generation
-  - Cosmos DB memory
   - Azure Monitor tracing
   - Hosted tool/function calling
