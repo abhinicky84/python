@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from app.domain.architecture_analysis import build_architecture_context
-from app.prompts.system import SYSTEM_PROMPT
+from app.prompts.system import ARCHITECTURE_COVERAGE_CHECKLIST, SYSTEM_PROMPT
 from app.schemas.architecture import AnalyzeResponse, ArchitectureAnalysis, MemoryContext
 from app.services.azure_ai_project import AzureAIProjectService
 from app.services.diagram_generator import DiagramGenerator
@@ -73,6 +73,9 @@ Reusable patterns from memory:
         return f"""
 System guidance:
 {SYSTEM_PROMPT}
+
+Architecture coverage checklist:
+{ARCHITECTURE_COVERAGE_CHECKLIST}
 
 Detected architecture domains:
 {analysis.detected_domains}

@@ -94,12 +94,21 @@ class DiagramGenerator:
 
         self._add_node(nodes, "users", "Business Users", "channels")
         self._add_node(nodes, "web", "Web / Mobile Channels", "channels")
+        if self._mentions_any(text, ["partner", "dealer", "vendor", "portal"]):
+            self._add_node(nodes, "partners", "Partner / External Channels", "channels")
 
+        self._add_node(nodes, "frontend", "Frontend Apps / BFF", "experience")
         if self._mentions_any(text, ["aem", "content", "cms", "experience"]):
             self._add_node(nodes, "aem", "AEM", "experience")
         if self._mentions_any(text, ["adobe commerce", "commerce", "storefront", "cart", "checkout"]):
             self._add_node(nodes, "commerce", "Adobe Commerce", "experience")
-        if not any(node.category == "experience" for node in nodes):
+        if self._mentions_any(text, ["cdn", "edge", "front door"]):
+            self._add_node(nodes, "edge", "Edge Delivery / CDN", "experience")
+        if self._mentions_any(text, ["personalization", "personalisation", "targeting", "recommendation"]):
+            self._add_node(nodes, "personalization", "Personalization Engine", "experience")
+        if self._mentions_any(text, ["seo", "search engine", "discoverability", "metadata"]):
+            self._add_node(nodes, "seo", "SEO / Metadata Services", "experience")
+        if not any(node.key == "aem" for node in nodes):
             self._add_node(nodes, "portal", "Digital Experience Portal", "experience")
 
         self._add_node(nodes, "entra", "Microsoft Entra ID", "identity")
@@ -107,8 +116,13 @@ class DiagramGenerator:
             self._add_node(nodes, "network", "Private Network Boundary", "identity")
 
         self._add_node(nodes, "apim", "Azure API Management", "integration")
+        self._add_node(nodes, "api_gateway", "API Gateway", "integration")
+        if self._mentions_any(text, ["api gateway", "gateway", "edge api"]):
+            self._add_node(nodes, "edge_api", "Edge API Policies", "integration")
         if self._mentions_any(text, ["event", "async", "messaging", "queue", "service bus"]):
             self._add_node(nodes, "service_bus", "Azure Service Bus", "integration")
+        if self._mentions_any(text, ["event grid", "pub/sub", "webhook"]):
+            self._add_node(nodes, "event_grid", "Azure Event Grid", "integration")
         self._add_node(nodes, "orchestration", "Integration Orchestration", "integration")
 
         if self._contains_service(analysis, "Azure Container Apps"):
@@ -116,6 +130,11 @@ class DiagramGenerator:
         if self._contains_service(analysis, "Azure Kubernetes Service"):
             self._add_node(nodes, "aks", "Azure Kubernetes Service", "applications")
         self._add_node(nodes, "domain_services", "Domain Services", "applications")
+        self._add_node(nodes, "microservices", "Microservices", "applications")
+        if self._mentions_any(text, ["microservice", "micro-service", "bounded context"]):
+            self._add_node(nodes, "service_mesh", "Service-to-Service Policies", "applications")
+        if self._mentions_any(text, ["soa", "service-oriented", "service oriented", "shared service"]):
+            self._add_node(nodes, "shared_services", "Shared Enterprise Services", "applications")
         if self._contains_service(analysis, "Azure AI Foundry"):
             self._add_node(nodes, "ai_foundry", "Azure AI Foundry", "applications")
 
@@ -123,6 +142,14 @@ class DiagramGenerator:
             self._add_node(nodes, "sap", self._extract_sap_label(text), "systems")
         if self._mentions_any(text, ["salesforce"]):
             self._add_node(nodes, "salesforce", "Salesforce", "systems")
+        if self._mentions_any(text, ["martech", "campaign", "journey orchestration", "marketing automation"]):
+            self._add_node(nodes, "martech", "MarTech Platform", "systems")
+        if self._mentions_any(text, ["loyalty", "rewards", "membership"]):
+            self._add_node(nodes, "loyalty", "Loyalty Platform", "systems")
+        if self._mentions_any(text, ["search", "site search", "product search", "seo"]):
+            self._add_node(nodes, "search_platform", "Search Platform", "systems")
+        if self._mentions_any(text, ["data platform", "lakehouse", "warehouse", "fabric", "databricks"]):
+            self._add_node(nodes, "data_platform", "Enterprise Data Platform", "systems")
         if self._mentions_any(text, ["erp", "crm", "backend", "line of business"]) and len(
             [node for node in nodes if node.category == "systems"]
         ) < 2:
@@ -133,6 +160,10 @@ class DiagramGenerator:
         self._add_node(nodes, "canonical_data", "Canonical Data Model", "data")
         if self._contains_any_service(analysis, ["Azure Data Lake / Synapse / Fabric", "Synapse", "Fabric"]):
             self._add_node(nodes, "analytics", "Analytics & Reporting", "data")
+        if self._mentions_any(text, ["personalization", "personalisation", "customer profile", "cdp"]):
+            self._add_node(nodes, "customer_profile", "Customer Profile / CDP", "data")
+        if self._contains_service(analysis, "Azure AI Search") or self._mentions_any(text, ["seo", "search", "discoverability"]):
+            self._add_node(nodes, "search_index", "Search / SEO Index", "data")
 
         self._add_node(nodes, "monitor", "Azure Monitor", "observability")
         self._add_node(nodes, "governance", "Audit / Governance", "observability")
@@ -150,23 +181,45 @@ class DiagramGenerator:
                     edges.append(edge)
 
         connect("users", "web", "Journeys")
+        connect("partners", "web", "Partner Access")
 
         for experience in self._node_keys(nodes, "experience"):
             connect("web", experience, "UX / Content")
+            connect("partners", experience, "Partner Experience")
             connect(experience, "entra", "SSO / Session")
             connect(experience, "apim", "Experience APIs")
 
+        connect("web", "edge", "Global Delivery")
+        connect("web", "frontend", "Channel Requests")
+        connect("edge", "frontend", "Edge Routing")
+        connect("frontend", "apim", "BFF / App APIs")
+        connect("frontend", "api_gateway", "Northbound APIs")
+        connect("seo", "aem", "Structured Metadata")
+        connect("seo", "search_index", "SEO Feeds")
+        connect("personalization", "frontend", "Targeted Content")
+        connect("personalization", "customer_profile", "Profile Decisions")
+
         connect("entra", "apim", "AuthN / Tokens")
         connect("network", "apim", "Private Access")
+        connect("api_gateway", "apim", "North-South Policies")
+        connect("edge_api", "api_gateway", "Edge Controls")
         connect("apim", "orchestration", "Policy / Routing")
+        connect("event_grid", "orchestration", "Events / Notifications")
         connect("orchestration", "domain_services", "Service Composition")
+        connect("orchestration", "microservices", "Domain APIs")
+        connect("orchestration", "shared_services", "Shared Services")
         connect("orchestration", "service_bus", "Events")
         connect("service_bus", "domain_services", "Async Commands")
+        connect("service_bus", "microservices", "Domain Events")
         connect("domain_services", "container_apps", "Runtime")
         connect("domain_services", "aks", "Runtime")
         connect("domain_services", "ai_foundry", "AI Enrichment")
         connect("domain_services", "operational_data", "Transactional Data")
         connect("domain_services", "canonical_data", "Canonical Events")
+        connect("microservices", "container_apps", "Service Runtime")
+        connect("microservices", "operational_data", "Service Data")
+        connect("microservices", "canonical_data", "Business Events")
+        connect("service_mesh", "microservices", "East-West Controls")
         connect("service_bus", "canonical_data", "Event Stream")
 
         for system in self._node_keys(nodes, "systems"):
@@ -175,11 +228,26 @@ class DiagramGenerator:
 
         connect("operational_data", "analytics", "Batch / CDC")
         connect("canonical_data", "analytics", "Analytics Feed")
+        connect("customer_profile", "analytics", "Customer Insights")
+        connect("canonical_data", "customer_profile", "Profile Inputs")
+        connect("canonical_data", "search_index", "Searchable Content")
         connect("analytics", "web", "Insights / Reporting")
+        connect("analytics", "personalization", "Segments / Models")
 
-        for observable in ("apim", "orchestration", "domain_services", "service_bus", "container_apps", "aks"):
+        for observable in (
+            "apim",
+            "api_gateway",
+            "orchestration",
+            "domain_services",
+            "microservices",
+            "service_bus",
+            "event_grid",
+            "container_apps",
+            "aks",
+            "frontend",
+        ):
             connect(observable, "monitor", "Telemetry", style="dashed")
-        for governed in ("entra", "apim", "canonical_data", "analytics"):
+        for governed in ("entra", "apim", "api_gateway", "canonical_data", "analytics", "customer_profile", "search_index"):
             connect(governed, "governance", "Audit", style="dashed")
 
         return edges
