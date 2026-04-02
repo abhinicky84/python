@@ -3,16 +3,23 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import HTMLResponse
 
 from app.agents.enterprise_architecture import EnterpriseArchitectureAgent
 from app.core.config import get_settings
 from app.schemas.architecture import AnalyzeResponse, ArchitectureRequest
+from app.ui import INDEX_HTML
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 settings = get_settings()
 agent = EnterpriseArchitectureAgent()
+
+
+@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+def home() -> HTMLResponse:
+    return HTMLResponse(INDEX_HTML)
 
 
 @router.get("/health")

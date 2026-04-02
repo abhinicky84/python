@@ -174,10 +174,20 @@ uvicorn app.main:app --reload
 
 Open:
 
+- App UI: `http://127.0.0.1:8000/`
 - API docs: `http://127.0.0.1:8000/docs`
 - Health: `http://127.0.0.1:8000/health`
 
 ## 6. Test the agent
+
+You can now use the built-in UI at `http://127.0.0.1:8000/` to:
+
+- enter an architecture prompt
+- generate a formatted recommendation on the right side
+- preview the generated draw.io diagram in the browser
+- download the report, Mermaid diagram, and draw.io XML
+
+Or call the API directly with `POST /analyze`.
 
 Sample JSON for `POST /analyze`:
 
