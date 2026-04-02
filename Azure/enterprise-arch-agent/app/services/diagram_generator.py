@@ -424,7 +424,7 @@ class DiagramGenerator:
     def _build_drawio_xml(self, nodes: list[DiagramNode], edges: list[DiagramEdge]) -> str:
         node_map = {node.key: node for node in nodes}
         display_keys = [key for key in self._drawio_display_node_keys() if key in node_map]
-        page_width = 2450
+        page_width = 2700
         page_height = 1450
 
         lines = [
@@ -484,6 +484,7 @@ class DiagramGenerator:
                 "html=1;endArrow=block;strokeWidth=1.6;"
             )
             edge_style += "dashed=1;strokeColor=#94a3b8;" if style == "dashed" else "strokeColor=#475569;"
+            edge_style += self._drawio_edge_anchor_style(source, target, node_ids)
             value = escape(label) if label else ""
             if value:
                 edge_style += "fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;"
@@ -608,11 +609,11 @@ class DiagramGenerator:
             ("Users", 40, 108),
             ("Channels", 210, 108),
             ("Experience", 430, 108),
-            ("Security", 910, 108),
-            ("Integration", 1110, 108),
-            ("Applications", 1490, 108),
-            ("Enterprise Systems", 1770, 108),
-            ("Data & Insights", 1110, 610),
+            ("Security", 980, 108),
+            ("Integration", 1230, 108),
+            ("Applications", 1760, 108),
+            ("Enterprise Systems", 2060, 108),
+            ("Data & Insights", 1280, 700),
             ("Operations", 1870, 610),
         ]
 
@@ -621,40 +622,40 @@ class DiagramGenerator:
             "users": (60, 170, 42, 80),
             "partners": (60, 340, 42, 80),
             "web": (190, 210, 190, 96),
-            "edge": (430, 125, 210, 132),
-            "frontend": (430, 285, 210, 132),
-            "aem": (680, 100, 250, 188),
-            "aem_assets": (680, 300, 250, 150),
-            "commerce": (680, 470, 250, 168),
-            "personalization": (680, 660, 250, 168),
-            "target": (950, 470, 180, 132),
-            "dynamic_media": (950, 620, 180, 132),
-            "entra": (950, 125, 180, 114),
-            "network": (950, 275, 180, 96),
-            "apim": (1160, 125, 220, 132),
-            "orchestration": (1410, 125, 220, 132),
-            "service_bus": (1410, 295, 220, 114),
-            "domain_services": (1660, 125, 230, 132),
-            "microservices": (1660, 295, 230, 132),
-            "ai_foundry": (1660, 465, 230, 114),
-            "sap": (1920, 95, 240, 188),
-            "sap_cpi": (1920, 300, 220, 114),
-            "sap_btp": (1920, 435, 220, 114),
-            "fiori": (1920, 570, 220, 114),
-            "salesforce": (2180, 300, 180, 114),
-            "martech": (2180, 435, 180, 114),
-            "canonical_data": (1160, 860, 220, 114),
-            "customer_profile": (1410, 860, 220, 114),
-            "search_index": (1660, 860, 220, 114),
-            "analytics": (1910, 860, 220, 114),
-            "adobe_analytics": (1160, 1000, 220, 114),
-            "aep": (1410, 1000, 220, 114),
-            "rt_cdp": (1660, 1000, 220, 114),
-            "azure_cloud": (1910, 1000, 220, 114),
-            "aws_cloud": (2160, 1000, 180, 114),
-            "gcp_cloud": (2160, 860, 180, 114),
-            "monitor": (1910, 1160, 180, 78),
-            "governance": (1910, 1260, 180, 78),
+            "edge": (430, 110, 210, 132),
+            "frontend": (430, 300, 210, 132),
+            "aem": (700, 80, 250, 188),
+            "aem_assets": (700, 300, 250, 150),
+            "commerce": (700, 500, 250, 168),
+            "personalization": (700, 720, 250, 168),
+            "target": (990, 500, 180, 132),
+            "dynamic_media": (990, 300, 180, 132),
+            "entra": (980, 90, 190, 114),
+            "network": (980, 230, 190, 96),
+            "apim": (1230, 90, 220, 132),
+            "orchestration": (1490, 90, 230, 132),
+            "service_bus": (1490, 280, 230, 114),
+            "domain_services": (1760, 90, 240, 132),
+            "microservices": (1760, 280, 240, 132),
+            "ai_foundry": (1760, 470, 240, 114),
+            "sap": (2060, 70, 250, 188),
+            "sap_cpi": (2060, 290, 220, 114),
+            "sap_btp": (2060, 430, 220, 114),
+            "fiori": (2060, 570, 220, 114),
+            "salesforce": (2330, 290, 200, 114),
+            "martech": (2330, 430, 200, 114),
+            "canonical_data": (1280, 760, 240, 114),
+            "customer_profile": (1560, 760, 240, 114),
+            "search_index": (1840, 760, 240, 114),
+            "analytics": (2120, 760, 240, 114),
+            "adobe_analytics": (1280, 920, 220, 114),
+            "aep": (1540, 920, 220, 114),
+            "rt_cdp": (1800, 920, 220, 114),
+            "azure_cloud": (2060, 920, 220, 114),
+            "aws_cloud": (2320, 1080, 200, 114),
+            "gcp_cloud": (2320, 920, 200, 114),
+            "monitor": (2120, 1110, 180, 78),
+            "governance": (2120, 1210, 180, 78),
         }
         return positions.get(key, (210, 230, 200, 76))
 
@@ -790,3 +791,43 @@ class DiagramGenerator:
     def _drawio_safe_id(self, value: str) -> str:
         normalized = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
         return normalized or "section"
+
+    def _drawio_edge_anchor_style(self, source: str, target: str, node_ids: dict[str, str]) -> str:
+        node_keys = {value: key for key, value in node_ids.items()}
+        source_key = node_keys.get(source)
+        target_key = node_keys.get(target)
+        anchor_map = {
+            ("users", "web"): "exitX=1;exitY=0.5;entryX=0;entryY=0.35;",
+            ("partners", "web"): "exitX=1;exitY=0.5;entryX=0;entryY=0.75;",
+            ("web", "frontend"): "exitX=1;exitY=0.7;entryX=0;entryY=0.35;",
+            ("edge", "frontend"): "exitX=0.5;exitY=1;entryX=0.35;entryY=0;",
+            ("aem", "frontend"): "exitX=0;exitY=0.6;entryX=1;entryY=0.2;",
+            ("aem_assets", "aem"): "exitX=0.5;exitY=0;entryX=0.5;entryY=1;",
+            ("commerce", "frontend"): "exitX=0;exitY=0.2;entryX=0.5;entryY=1;",
+            ("personalization", "frontend"): "exitX=0;exitY=0.5;entryX=0.5;entryY=1;",
+            ("target", "personalization"): "exitX=0;exitY=0.5;entryX=1;entryY=0.35;",
+            ("dynamic_media", "frontend"): "exitX=0;exitY=0.5;entryX=1;entryY=0.65;",
+            ("frontend", "entra"): "exitX=1;exitY=0.1;entryX=0;entryY=0.5;",
+            ("entra", "apim"): "exitX=1;exitY=0.5;entryX=0;entryY=0.25;",
+            ("frontend", "apim"): "exitX=1;exitY=0.5;entryX=0;entryY=0.7;",
+            ("apim", "orchestration"): "exitX=1;exitY=0.5;entryX=0;entryY=0.5;",
+            ("orchestration", "service_bus"): "exitX=0.5;exitY=1;entryX=0.5;entryY=0;",
+            ("orchestration", "domain_services"): "exitX=1;exitY=0.45;entryX=0;entryY=0.45;",
+            ("service_bus", "microservices"): "exitX=1;exitY=0.5;entryX=0;entryY=0.5;",
+            ("domain_services", "sap"): "exitX=1;exitY=0.25;entryX=0;entryY=0.45;",
+            ("domain_services", "salesforce"): "exitX=1;exitY=0.5;entryX=0;entryY=0.5;",
+            ("domain_services", "martech"): "exitX=1;exitY=0.8;entryX=0;entryY=0.5;",
+            ("domain_services", "canonical_data"): "exitX=0.4;exitY=1;entryX=0.5;entryY=0;",
+            ("canonical_data", "customer_profile"): "exitX=1;exitY=0.5;entryX=0;entryY=0.5;",
+            ("canonical_data", "search_index"): "exitX=1;exitY=0.75;entryX=0;entryY=0.25;",
+            ("canonical_data", "analytics"): "exitX=1;exitY=0.3;entryX=0;entryY=0.3;",
+            ("adobe_analytics", "analytics"): "exitX=1;exitY=0.3;entryX=0.2;entryY=1;",
+            ("aep", "customer_profile"): "exitX=0.5;exitY=0;entryX=0.5;entryY=1;",
+            ("rt_cdp", "customer_profile"): "exitX=0.5;exitY=0;entryX=0.8;entryY=1;",
+            ("azure_cloud", "analytics"): "exitX=0.5;exitY=0;entryX=0.8;entryY=1;",
+            ("gcp_cloud", "analytics"): "exitX=0;exitY=0.4;entryX=1;entryY=0.8;",
+            ("analytics", "personalization"): "exitX=0;exitY=0.15;entryX=1;entryY=0.85;",
+            ("apim", "monitor"): "exitX=0.7;exitY=1;entryX=0.5;entryY=0;",
+            ("canonical_data", "governance"): "exitX=1;exitY=1;entryX=0;entryY=0.3;",
+        }
+        return anchor_map.get((source_key, target_key), "")
