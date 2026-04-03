@@ -1,19 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from app.schemas.architecture import ArchitectureAnalysis
 
 
-@dataclass(frozen=True)
-class ArchitectureContext:
-    detected_domains: str
-    suggested_azure_services: list[str]
-    integration_guidance: str
-
-
-def build_architecture_context(user_input: str) -> ArchitectureContext:
-    return ArchitectureContext(
+def build_architecture_context(user_input: str, cloud_provider: str | None = None) -> ArchitectureAnalysis:
+    resolved_cloud = resolve_cloud_provider(user_input, cloud_provider)
+    return ArchitectureAnalysis(
+        cloud_provider=resolved_cloud,
+        cloud_specific_guidance=build_cloud_specific_guidance(resolved_cloud, user_input),
         detected_domains=classify_architecture_request(user_input),
-        suggested_azure_services=suggest_azure_services(user_input),
+        tools_and_technologies=extract_tools_and_technologies(user_input),
+        suggested_azure_services=[],
         integration_guidance=recommend_integration_pattern(user_input),
     )
 
@@ -73,50 +70,129 @@ def classify_architecture_request(user_input: str) -> str:
     return ", ".join(tags)
 
 
-def suggest_azure_services(user_input: str) -> list[str]:
-    services = [
+def resolve_cloud_provider(user_input: str, selected_cloud: str | None = None, detected_cloud: str | None = None) -> str:
+    selected_normalized = normalize_cloud_provider(selected_cloud)
+    if selected_normalized:
+        return selected_normalized
+
+    inferred_from_text = normalize_cloud_provider(infer_cloud_provider_from_text(user_input))
+    detected_normalized = normalize_cloud_provider(detected_cloud)
+
+    if detected_normalized and detected_normalized != "Hybrid / Multi-cloud":
+        return detected_normalized
+    if inferred_from_text:
+        return inferred_from_text
+    if detected_normalized:
+        return detected_normalized
+    return "Azure"
+
+
+def infer_cloud_provider_from_text(user_input: str) -> str | None:
+    lowered = user_input.casefold()
+    if "aws" in lowered or "amazon web services" in lowered or "amazon cloud" in lowered:
+        return "AWS"
+    if "gcp" in lowered or "google cloud" in lowered or "google cloud platform" in lowered:
+        return "GCP"
+    if "multi-cloud" in lowered or "multicloud" in lowered or "hybrid cloud" in lowered:
+        return "Hybrid / Multi-cloud"
+    if "azure" in lowered or "microsoft cloud" in lowered or "entra" in lowered or "cosmos db" in lowered or "azure api management" in lowered:
+        return "Azure"
+    return None
+
+
+def normalize_cloud_provider(value: str | None) -> str | None:
+    if not value:
+        return None
+    lowered = value.strip().casefold()
+    if "google cloud platform" in lowered or lowered == "gcp" or "google cloud" in lowered:
+        return "GCP"
+    if lowered == "aws" or "amazon web services" in lowered or lowered.startswith("amazon aws") or "amazon cloud" in lowered:
+        return "AWS"
+    if lowered == "azure" or "microsoft azure" in lowered:
+        return "Azure"
+    if (
+        lowered == "hybrid"
+        or "multi-cloud" in lowered
+        or "multicloud" in lowered
+        or "hybrid / multi-cloud" in lowered
+        or "hybrid cloud" in lowered
+    ):
+        return "Hybrid / Multi-cloud"
+    return None
+
+
+def extract_tools_and_technologies(user_input: str) -> list[str]:
+    candidates = [
+        "AEM",
+        "Adobe Experience Manager",
+        "Adobe Commerce",
+        "SAP",
+        "SAP S/4HANA",
+        "Salesforce",
+        "Azure API Management",
         "Azure AI Foundry",
         "Azure Container Apps",
-        "Azure Monitor",
+        "Azure Kubernetes Service",
+        "Azure Service Bus",
+        "Azure Event Grid",
+        "Azure AI Search",
         "Microsoft Entra ID",
-        "Azure API Management",
+        "Azure Front Door",
+        "Azure Storage",
+        "Cosmos DB",
+        "Fabric",
+        "Synapse",
+        "Databricks",
+        "Redis",
+    ]
+    lowered = user_input.casefold()
+    found: list[str] = []
+    for candidate in candidates:
+        if candidate.casefold() in lowered and candidate not in found:
+            found.append(candidate)
+    return found
+
+
+def build_cloud_specific_guidance(cloud_provider: str, user_input: str) -> list[str]:
+    normalized = cloud_provider.casefold()
+    guidance = [
+        "Keep the recommendation aligned to the preferred cloud environment unless the request explicitly calls for hybrid or multi-cloud patterns.",
+        "Use service names, security controls, integration services, and operational patterns that match the target cloud platform.",
     ]
 
-    text = user_input.lower()
+    if normalized == "aws":
+        guidance.extend(
+            [
+                "Favor AWS-native edge, API, container, messaging, security, and observability capabilities for the target-state design.",
+                "Describe integrations and runtime decisions using AWS terminology such as API Gateway, CloudFront, EKS, App Runner, EventBridge, SQS/SNS, CloudWatch, Secrets Manager, and IAM Identity Center when relevant.",
+            ]
+        )
+    elif normalized == "gcp":
+        guidance.extend(
+            [
+                "Favor GCP-native edge, API, runtime, eventing, data, AI, security, and observability capabilities for the target-state design.",
+                "Describe integrations and runtime decisions using GCP terminology such as Apigee, Cloud Load Balancing, Cloud Run, GKE, Pub/Sub, Eventarc, BigQuery, Vertex AI, Secret Manager, and Cloud Monitoring when relevant.",
+            ]
+        )
+    elif normalized == "hybrid / multi-cloud":
+        guidance.extend(
+            [
+                "Separate shared business capabilities from cloud-specific platform responsibilities and make handoff points explicit.",
+                "Identify which integrations, security controls, data movement patterns, and operations remain shared versus cloud-specific.",
+            ]
+        )
+    else:
+        guidance.extend(
+            [
+                "Favor Azure-native edge, API, compute, messaging, security, data, and observability capabilities for the target-state design.",
+                "Describe integrations and runtime decisions using Azure terminology such as API Management, Front Door, Container Apps or AKS, Service Bus, Event Grid, Key Vault, Entra ID, and Azure Monitor when relevant.",
+            ]
+        )
 
-    if _contains_any(text, ("gateway", "api gateway", "integration", "event", "async", "messaging")):
-        services.append("Azure API Management")
-    if _contains_any(text, ("microservice", "microservices", "micro-service", "service mesh")):
-        services.append("Azure Container Apps")
-    if _contains_any(text, ("event", "async", "messaging", "pub/sub", "webhook")):
-        services.append("Azure Service Bus")
-        services.append("Azure Event Grid")
-    if _contains_any(text, ("identity", "sso", "auth")):
-        services.append("Microsoft Entra ID")
-    if _contains_any(text, ("frontend", "front-end", "web", "mobile", "cdn", "edge", "spa")):
-        services.append("Azure Front Door / CDN")
-    if _contains_any(text, ("data", "storage", "operational store", "profile", "session")):
-        services.append("Azure Storage or Cosmos DB")
-    if _contains_any(text, ("analytics", "reporting", "bi", "dashboard", "data platform", "lakehouse", "warehouse", "fabric")):
-        services.append("Azure Data Lake / Synapse / Fabric")
-    if _contains_any(text, ("personalization", "personalisation", "targeting", "recommendation", "loyalty", "campaign", "cdp")):
-        services.append("Azure Cache for Redis")
-        services.append("Azure Data Lake / Synapse / Fabric")
-    if _contains_any(text, ("seo", "search", "discoverability", "metadata", "catalog")):
-        services.append("Azure AI Search")
-    if _contains_any(text, ("private", "network", "secure", "vnet", "private endpoint")):
-        services.append("Azure Private Link / VNets / Private Endpoints")
-    if _contains_any(text, ("kubernetes", "aks")):
-        services.append("Azure Kubernetes Service")
+    if "aem" in user_input.casefold() or "adobe" in user_input.casefold():
+        guidance.append("Keep Adobe platform integrations aligned with the selected cloud ingress, API, personalization, and analytics patterns rather than assuming a default vendor stack.")
 
-    seen: set[str] = set()
-    deduped: list[str] = []
-    for service in services:
-        if service not in seen:
-            seen.add(service)
-            deduped.append(service)
-
-    return deduped
+    return guidance
 
 
 def recommend_integration_pattern(user_input: str) -> str:

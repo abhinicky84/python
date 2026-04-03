@@ -181,6 +181,24 @@ INDEX_HTML = """<!DOCTYPE html>
         transform: translateY(-1px);
       }
 
+      select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px 16px;
+        font: inherit;
+        color: var(--text);
+        background: rgba(248, 250, 255, 0.9);
+        outline: none;
+        transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+      }
+
+      select:focus {
+        border-color: #6d8aff;
+        box-shadow: 0 0 0 4px rgba(51, 92, 255, 0.12);
+        transform: translateY(-1px);
+      }
+
       .hint {
         color: var(--muted);
         font-size: 12px;
@@ -331,17 +349,11 @@ INDEX_HTML = """<!DOCTYPE html>
         flex-wrap: wrap;
       }
 
-      .meta-grid,
       .section-grid {
         display: grid;
         gap: 16px;
       }
 
-      .meta-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-
-      .meta-card,
       .section-card,
       .diagram-card {
         border: 1px solid rgba(215, 222, 243, 0.92);
@@ -350,64 +362,77 @@ INDEX_HTML = """<!DOCTYPE html>
         box-shadow: 0 14px 28px rgba(67, 87, 153, 0.06);
       }
 
-      .meta-card {
-        padding: 18px;
-      }
-
-      .meta-card h4,
+      .section-card h4,
       .diagram-card h4 {
         margin: 0 0 12px;
-        font-size: 15px;
-      }
-
-      .meta-value,
-      .pill-list {
-        color: #334155;
-        font-size: 14px;
-        line-height: 1.6;
-      }
-
-      .pill-list {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-      }
-
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        min-height: 34px;
-        padding: 6px 12px;
-        border-radius: 999px;
-        background: #eef3ff;
-        color: #2440a5;
-        font-size: 13px;
-        font-weight: 600;
-      }
-
-      .section-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .section-card {
-        padding: 18px 18px 20px;
-      }
-
-      .section-card h4 {
-        margin: 0 0 10px;
         font-size: 17px;
       }
 
-      .section-card p {
-        margin: 0;
+      .section-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .section-card {
+        padding: 20px 22px 22px;
+      }
+
+      .section-title {
+        font-size: 18px;
+        font-weight: 800;
+        color: #172554;
+        margin-bottom: 14px;
+      }
+
+      .section-lines {
+        display: grid;
+        gap: 10px;
+        padding-left: 10px;
+        border-left: 3px solid #d9e3ff;
+      }
+
+      .detail-line {
         color: #334155;
-        line-height: 1.72;
-        white-space: pre-wrap;
+        line-height: 1.75;
+        font-size: 15px;
+        padding-left: 16px;
+        text-indent: -16px;
+      }
+
+      .detail-line strong {
+        color: #0f172a;
+        font-weight: 800;
+      }
+
+      .detail-subheading {
+        margin-top: 4px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #edf3ff, #f8fbff);
+        border: 1px solid #d6e2ff;
+        color: #17336b;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+      }
+
+      .detail-line code {
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: #eff4ff;
+        color: #1d4ed8;
+        font-family: var(--mono);
+        font-size: 0.92em;
+      }
+
+      .detail-line.bullet::before {
+        content: "• ";
+        color: #335cff;
+        font-weight: 900;
       }
 
       .diagram-layout {
         display: grid;
-        grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+        grid-template-columns: 1fr;
         gap: 16px;
       }
 
@@ -430,22 +455,6 @@ INDEX_HTML = """<!DOCTYPE html>
         width: 100%;
         min-width: 960px;
         height: auto;
-      }
-
-      .code-block {
-        margin: 0;
-        padding: 16px;
-        border-radius: 18px;
-        border: 1px solid rgba(215, 222, 243, 0.92);
-        background: #0f172a;
-        color: #dbe7ff;
-        font-family: var(--mono);
-        font-size: 12px;
-        line-height: 1.6;
-        white-space: pre-wrap;
-        word-break: break-word;
-        max-height: 660px;
-        overflow: auto;
       }
 
       .inline-note {
@@ -490,7 +499,6 @@ INDEX_HTML = """<!DOCTYPE html>
           border-bottom: 1px solid rgba(215, 222, 243, 0.9);
         }
 
-        .meta-grid,
         .section-grid,
         .diagram-layout {
           grid-template-columns: 1fr;
@@ -554,6 +562,20 @@ INDEX_HTML = """<!DOCTYPE html>
 
               <form id="analyze-form">
                 <div class="field">
+                  <label for="cloud-provider">Preferred Cloud</label>
+                  <select id="cloud-provider" name="cloud_provider">
+                    <option value="">Auto-detect (default to Azure)</option>
+                    <option value="Azure">Azure</option>
+                    <option value="AWS">AWS</option>
+                    <option value="GCP">GCP</option>
+                    <option value="Hybrid / Multi-cloud">Hybrid / Multi-cloud</option>
+                  </select>
+                  <div class="hint">
+                    Pick a cloud if you want the architecture and service suggestions biased to that environment.
+                  </div>
+                </div>
+
+                <div class="field">
                   <label for="prompt">Architecture Prompt</label>
                   <textarea
                     id="prompt"
@@ -563,7 +585,7 @@ INDEX_HTML = """<!DOCTYPE html>
                   ></textarea>
                   <div class="hint">
                     Include platforms, integration expectations, constraints, target users, or delivery goals. The API
-                    will return both the narrative and a draw.io XML artifact.
+                    will return the narrative plus downloadable draw.io and PPTX artifacts.
                   </div>
                 </div>
 
@@ -583,8 +605,8 @@ INDEX_HTML = """<!DOCTYPE html>
                 <div class="hero-icon"></div>
                 <h3>Turn a solution prompt into a formatted architecture package.</h3>
                 <p>
-                  The workspace will show sectioned recommendations, detected domains, Azure service suggestions, memory
-                  context, and a fully rendered preview of the generated draw.io diagram with download actions.
+                  The workspace will show sectioned recommendations followed by full-width previews of the generated
+                  draw.io and PPTX diagrams with download actions.
                 </p>
               </div>
             </section>
@@ -599,11 +621,10 @@ INDEX_HTML = """<!DOCTYPE html>
                 <div class="download-actions">
                   <button id="download-report" class="secondary" type="button">Download Report</button>
                   <button id="download-drawio" class="secondary" type="button">Download Draw.io</button>
-                  <button id="download-mermaid" class="secondary" type="button">Download Mermaid</button>
+                  <button id="download-pptx" class="secondary" type="button">Download PPTX</button>
                 </div>
               </div>
 
-              <div id="meta-grid" class="meta-grid"></div>
               <div id="section-grid" class="section-grid"></div>
 
               <div class="diagram-layout">
@@ -617,8 +638,12 @@ INDEX_HTML = """<!DOCTYPE html>
                 </article>
 
                 <article class="diagram-card">
-                  <h4>Draw.io XML</h4>
-                  <pre id="drawio-xml" class="code-block"></pre>
+                  <h4>PPTX Deck Slide Preview</h4>
+                  <div id="pptx-stage" class="diagram-stage"></div>
+                  <div class="inline-note">
+                    The slide preview reflects the generated PowerPoint deck artifact so you can review the presentation
+                    layout before downloading the `.pptx` file.
+                  </div>
                 </article>
               </div>
             </section>
@@ -630,20 +655,31 @@ INDEX_HTML = """<!DOCTYPE html>
     <script>
       const form = document.getElementById('analyze-form');
       const promptField = document.getElementById('prompt');
+      const cloudProviderField = document.getElementById('cloud-provider');
       const generateBtn = document.getElementById('generate-btn');
       const resetBtn = document.getElementById('reset-btn');
       const hero = document.getElementById('hero');
       const resultShell = document.getElementById('result-shell');
-      const metaGrid = document.getElementById('meta-grid');
       const sectionGrid = document.getElementById('section-grid');
-      const drawioXmlBlock = document.getElementById('drawio-xml');
       const diagramStage = document.getElementById('diagram-stage');
+      const pptxStage = document.getElementById('pptx-stage');
       const formMessage = document.getElementById('form-message');
       const downloadReportBtn = document.getElementById('download-report');
       const downloadDrawioBtn = document.getElementById('download-drawio');
-      const downloadMermaidBtn = document.getElementById('download-mermaid');
+      const downloadPptxBtn = document.getElementById('download-pptx');
 
       let latestResponse = null;
+      const SECTION_DEFINITIONS = [
+        { title: 'Business Context', aliases: ['Business Context'] },
+        { title: 'Architecture Overview', aliases: ['Architecture Overview', 'Target Architecture Overview'] },
+        { title: 'Core Systems', aliases: ['Core Systems', 'Key Systems', 'Platform Components'] },
+        { title: 'Integration Patterns', aliases: ['Integration Patterns', 'Integration Architecture'] },
+        { title: 'Security & Identity', aliases: ['Security & Identity', 'Security and Identity', 'Identity & Security'] },
+        { title: 'Data Flow', aliases: ['Data Flow', 'Data Architecture', 'Information Flow'] },
+        { title: 'Non-Functional Requirements', aliases: ['Non-Functional Requirements', 'NFRs', 'Non Functional Requirements'] },
+        { title: 'Risks & Assumptions', aliases: ['Risks & Assumptions', 'Risks and Assumptions'] },
+        { title: 'Recommended Delivery Phases', aliases: ['Recommended Delivery Phases', 'Delivery Phases', 'Recommended Roadmap', 'Implementation Phases'] },
+      ];
 
       const escapeHtml = (value) =>
         (value || '')
@@ -675,72 +711,116 @@ INDEX_HTML = """<!DOCTYPE html>
         generateBtn.textContent = loading ? 'Generating...' : 'Generate';
       };
 
+      const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+
+      const normalizeHeadingLine = (value) =>
+        (value || '')
+          .replace(/\\*\\*/g, '')
+          .replace(/^#{1,6}\\s*/, '')
+          .replace(/^\\d+[.)]\\s*/, '')
+          .trim();
+
+      const matchSectionHeading = (line) => {
+        const normalized = normalizeHeadingLine(line);
+        for (const section of SECTION_DEFINITIONS) {
+          for (const alias of section.aliases) {
+            const pattern = new RegExp('^' + escapeRegex(alias) + '\\\\s*:?[\\\\s-]*(.*)$', 'i');
+            const match = normalized.match(pattern);
+            if (match) {
+              return {
+                title: section.title,
+                remainder: (match[1] || '').trim(),
+              };
+            }
+          }
+        }
+        return null;
+      };
+
       const splitSections = (text) => {
         const normalized = (text || '').replace(/\\r/g, '').trim();
         if (!normalized) {
-          return [];
+          return SECTION_DEFINITIONS.map((section) => ({ title: section.title, content: '' }));
         }
 
-        const parts = normalized.split(/(?=^\\d+\\.\\s+)/m).filter(Boolean);
-        if (!parts.length) {
-          return [{ title: 'Architecture Output', content: normalized }];
-        }
+        const sectionsByTitle = new Map(SECTION_DEFINITIONS.map((section) => [section.title, []]));
+        const lines = normalized.split('\\n');
+        let currentTitle = null;
 
-        return parts.map((part) => {
-          const lines = part.trim().split('\\n');
-          const heading = lines.shift() || 'Architecture Output';
-          return {
-            title: heading.replace(/^\\d+\\.\\s*/, '').trim(),
-            content: lines.join('\\n').trim(),
-          };
+        lines.forEach((line, index) => {
+          const headingMatch = matchSectionHeading(line.trim());
+          if (headingMatch) {
+            currentTitle = headingMatch.title;
+            if (headingMatch.remainder) {
+              sectionsByTitle.get(currentTitle).push(headingMatch.remainder);
+            }
+            return;
+          }
+
+          if (currentTitle) {
+            sectionsByTitle.get(currentTitle).push(line);
+            return;
+          }
+
+          if (index === 0 && line.trim()) {
+            sectionsByTitle.get(SECTION_DEFINITIONS[0].title).push(line);
+          }
         });
+
+        return SECTION_DEFINITIONS.map((section) => ({
+          title: section.title,
+          content: (sectionsByTitle.get(section.title) || []).join('\\n').trim(),
+        }));
       };
 
-      const renderPills = (items) => {
-        const values = Array.isArray(items) ? items.filter(Boolean) : [];
-        if (!values.length) {
-          return '<div class="meta-value">None returned.</div>';
+      const stripUiOnlyText = (content) =>
+        (content || '')
+          .replace(
+            /If you want, I can turn this into a \\*\\*diagram-ready architecture blueprint\\*\\* with named boxes, flows, and layers for Visio\\/Miro\\/Lucidchart generation\\.?/gi,
+            ''
+          )
+          .replace(/^#{0,3}\\s*(?:If you want|If you'd like|If you would like|If needed|Let me know if you'd like|I can also|I can next|Next, I can).*$/gim, '')
+          .trim();
+
+      const formatSectionLines = (content) => {
+        const cleaned = stripUiOnlyText(content);
+        const rawLines = cleaned
+          .split('\\n')
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+        if (!rawLines.length) {
+          return '<div class="detail-line">No details provided.</div>';
         }
 
-        return '<div class="pill-list">' + values.map((item) => '<span class="pill">' + escapeHtml(item) + '</span>').join('') + '</div>';
-      };
+        return rawLines
+          .map((line) => {
+            if (/^#{3,6}\\s+/.test(line)) {
+              return '<div class="detail-subheading">' + escapeHtml(line.replace(/^#{3,6}\\s+/, '').trim()) + '</div>';
+            }
 
-      const renderMeta = (data) => {
-        const metaCards = [
-          {
-            title: 'Detected Domains',
-            body: '<div class="meta-value">' + escapeHtml(data.detected_domains || 'Not provided') + '</div>',
-          },
-          {
-            title: 'Suggested Azure Services',
-            body: renderPills(data.suggested_azure_services),
-          },
-          {
-            title: 'Memory Context',
-            body:
-              '<div class="meta-value"><strong>Backend:</strong> ' +
-              escapeHtml(data.memory_backend || 'none') +
-              '<br /><strong>Record ID:</strong> ' +
-              escapeHtml(data.memory_record_id || 'Not stored') +
-              '</div>',
-          },
-          {
-            title: 'Reusable Patterns',
-            body: renderPills(data.reusable_patterns),
-          },
-          {
-            title: 'Prior Recommendations',
-            body: renderPills(data.prior_recommendations),
-          },
-          {
-            title: 'Export Summary',
-            body:
-              '<div class="meta-value">Download the formatted report, the generated Mermaid flow, or the draw.io XML used to render the preview.</div>',
-          },
-        ];
+            const isBullet = /^(?:[-*•]|\\d+\\.)\\s+/.test(line);
+            const normalized = line.replace(/^(?:[-*•]|\\d+\\.)\\s+/, '').trim();
+            const match = normalized.match(/^([^:]{1,80}):(\\s+.+)$/);
+            const inlineHtml = (value) =>
+              escapeHtml(value)
+                .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>');
 
-        metaGrid.innerHTML = metaCards
-          .map((card) => '<article class="meta-card"><h4>' + escapeHtml(card.title) + '</h4>' + card.body + '</article>')
+            if (match) {
+              return (
+                '<div class="detail-line' +
+                (isBullet ? ' bullet' : '') +
+                '"><strong>' +
+                inlineHtml(match[1].trim() + ':') +
+                '</strong> ' +
+                inlineHtml(match[2].trim()) +
+                '</div>'
+              );
+            }
+
+            return '<div class="detail-line' + (isBullet ? ' bullet' : '') + '">' + inlineHtml(normalized) + '</div>';
+          })
           .join('');
       };
 
@@ -749,11 +829,11 @@ INDEX_HTML = """<!DOCTYPE html>
         sectionGrid.innerHTML = sections
           .map(
             (section) =>
-              '<article class="section-card"><h4>' +
+              '<article class="section-card"><div class="section-title">' +
               escapeHtml(section.title) +
-              '</h4><p>' +
-              escapeHtml(section.content || 'No details provided.') +
-              '</p></article>'
+              '</div><div class="section-lines">' +
+              formatSectionLines(section.content) +
+              '</div></article>'
           )
           .join('');
       };
@@ -879,6 +959,17 @@ INDEX_HTML = """<!DOCTYPE html>
           y: node.geometry.y + node.geometry.height * axisY,
         });
 
+        const orthogonalPath = (start, end) => {
+          const horizontalGap = Math.abs(end.x - start.x);
+          const verticalGap = Math.abs(end.y - start.y);
+          if (horizontalGap > verticalGap) {
+            const midX = start.x + (end.x - start.x) / 2;
+            return `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+          }
+          const midY = start.y + (end.y - start.y) / 2;
+          return `M ${start.x} ${start.y} L ${start.x} ${midY} L ${end.x} ${midY} L ${end.x} ${end.y}`;
+        };
+
         const svgParts = [];
         svgParts.push(
           '<svg viewBox="0 0 ' +
@@ -908,19 +999,14 @@ INDEX_HTML = """<!DOCTYPE html>
           const midX = (start.x + end.x) / 2;
           const midY = (start.y + end.y) / 2;
           const dash = edge.style.dashed === '1' ? ' stroke-dasharray="12 8"' : '';
+          const path = orthogonalPath(start, end);
 
           svgParts.push(
-            '<line x1="' +
-              start.x +
-              '" y1="' +
-              start.y +
-              '" x2="' +
-              end.x +
-              '" y2="' +
-              end.y +
-              '" stroke="#5b6478" stroke-width="3"' +
+            '<path d="' +
+              path +
+              '" fill="none" stroke="#5b6478" stroke-width="3"' +
               dash +
-              ' marker-end="url(#arrowhead)"></line>'
+              ' marker-end="url(#arrowhead)"></path>'
           );
 
           if (edge.label) {
@@ -1038,10 +1124,20 @@ INDEX_HTML = """<!DOCTYPE html>
         lines.push('Prompt:');
         lines.push(promptField.value.trim());
         lines.push('');
+        lines.push('Cloud Provider:');
+        lines.push(data.cloud_provider || 'Azure');
+        lines.push('');
         lines.push('Detected Domains:');
         lines.push(data.detected_domains || 'Not provided');
         lines.push('');
-        lines.push('Suggested Azure Services:');
+        lines.push('Tools and Technologies:');
+        if ((data.tools_and_technologies || []).length) {
+          data.tools_and_technologies.forEach((item) => lines.push('- ' + item));
+        } else {
+          lines.push('- None');
+        }
+        lines.push('');
+        lines.push('Suggested Cloud Services:');
         (data.suggested_azure_services || []).forEach((item) => lines.push('- ' + item));
         lines.push('');
         lines.push('Reusable Patterns:');
@@ -1080,14 +1176,32 @@ INDEX_HTML = """<!DOCTYPE html>
         URL.revokeObjectURL(url);
       };
 
+      const downloadBase64File = (filename, base64Content, type) => {
+        const binary = atob(base64Content || '');
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        const blob = new Blob([bytes], { type });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      };
+
       const renderResponse = (data) => {
         latestResponse = data;
         hero.style.display = 'none';
         resultShell.classList.add('visible');
-        drawioXmlBlock.textContent = data.drawio_xml || '';
-        renderMeta(data);
+        const subtitle = document.getElementById('result-subtitle');
+        subtitle.textContent = 'Review the structured output and export the assets below. Cloud: ' + (data.cloud_provider || 'Azure') + '.';
         renderSections(data);
         renderDrawioPreview(data.drawio_xml || '');
+        pptxStage.innerHTML = data.pptx_preview_svg || '';
       };
 
       form.addEventListener('submit', async (event) => {
@@ -1105,7 +1219,7 @@ INDEX_HTML = """<!DOCTYPE html>
           const response = await fetch('/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt }),
+            body: JSON.stringify({ prompt, cloud_provider: cloudProviderField.value || null }),
           });
 
           if (!response.ok) {
@@ -1125,14 +1239,14 @@ INDEX_HTML = """<!DOCTYPE html>
 
       resetBtn.addEventListener('click', () => {
         form.reset();
+        cloudProviderField.value = '';
         latestResponse = null;
         hideMessage();
         resultShell.classList.remove('visible');
         hero.style.display = 'grid';
-        metaGrid.innerHTML = '';
         sectionGrid.innerHTML = '';
-        drawioXmlBlock.textContent = '';
         diagramStage.innerHTML = '';
+        pptxStage.innerHTML = '';
       });
 
       downloadReportBtn.addEventListener('click', () => {
@@ -1151,12 +1265,16 @@ INDEX_HTML = """<!DOCTYPE html>
         downloadFile('enterprise-architecture.drawio', latestResponse.drawio_xml || '', 'application/xml;charset=utf-8');
       });
 
-      downloadMermaidBtn.addEventListener('click', () => {
+      downloadPptxBtn.addEventListener('click', () => {
         if (!latestResponse) {
-          showMessage('Generate an architecture package before downloading the Mermaid diagram.', 'error');
+          showMessage('Generate an architecture package before downloading the PowerPoint deck.', 'error');
           return;
         }
-        downloadFile('enterprise-architecture.mmd', latestResponse.mermaid_diagram || '', 'text/plain;charset=utf-8');
+        downloadBase64File(
+          'enterprise-architecture-deck.pptx',
+          latestResponse.pptx_base64 || '',
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        );
       });
     </script>
   </body>

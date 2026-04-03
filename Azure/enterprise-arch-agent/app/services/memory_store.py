@@ -50,10 +50,11 @@ class BaseMemoryStore(ABC):
             created_at=timestamp.isoformat(),
             version=timestamp.strftime("v%Y%m%d%H%M%S"),
             request_prompt=user_input,
+            cloud_provider=analysis.cloud_provider,
             result=response.result,
             detected_domains=analysis.detected_domains,
+            tools_and_technologies=analysis.tools_and_technologies,
             suggested_azure_services=response.suggested_azure_services,
-            mermaid_diagram=response.mermaid_diagram,
             drawio_xml=response.drawio_xml,
             reusable_patterns=reusable_patterns,
             prior_recommendation_summary=self._summarize_response(response.result),
@@ -139,7 +140,7 @@ class CosmosMemoryStore(BaseMemoryStore):
         partition_key = self._partition_key(analysis)
         query = (
             "SELECT TOP 5 c.id, c.partition_key, c.created_at, c.version, c.request_prompt, c.result, "
-            "c.detected_domains, c.suggested_azure_services, c.mermaid_diagram, c.drawio_xml, "
+            "c.detected_domains, c.tools_and_technologies, c.suggested_azure_services, c.drawio_xml, "
             "c.reusable_patterns, c.prior_recommendation_summary "
             "FROM c WHERE c.partition_key = @pk ORDER BY c.created_at DESC"
         )
@@ -199,10 +200,11 @@ class TableMemoryStore(BaseMemoryStore):
             "created_at": record.created_at,
             "version": record.version,
             "request_prompt": record.request_prompt,
+            "cloud_provider": record.cloud_provider or "",
             "result": record.result,
             "detected_domains": record.detected_domains,
+            "tools_and_technologies": json.dumps(record.tools_and_technologies),
             "suggested_azure_services": json.dumps(record.suggested_azure_services),
-            "mermaid_diagram": record.mermaid_diagram,
             "drawio_xml": record.drawio_xml,
             "reusable_patterns": json.dumps(record.reusable_patterns),
             "prior_recommendation_summary": record.prior_recommendation_summary,
@@ -217,10 +219,11 @@ class TableMemoryStore(BaseMemoryStore):
             created_at=entity["created_at"],
             version=entity["version"],
             request_prompt=entity["request_prompt"],
+            cloud_provider=entity.get("cloud_provider") or None,
             result=entity["result"],
             detected_domains=entity["detected_domains"],
+            tools_and_technologies=json.loads(entity.get("tools_and_technologies", "[]")),
             suggested_azure_services=json.loads(entity["suggested_azure_services"]),
-            mermaid_diagram=entity["mermaid_diagram"],
             drawio_xml=entity["drawio_xml"],
             reusable_patterns=json.loads(entity["reusable_patterns"]),
             prior_recommendation_summary=entity["prior_recommendation_summary"],

@@ -30,8 +30,8 @@ It then returns a structured recommendation with:
 
 It also generates enterprise delivery artifacts:
 
-- Mermaid flow diagram
 - draw.io XML that can be imported into diagrams.net / draw.io
+- PowerPoint `.pptx` architecture slide deck
 
 It can also persist memory for:
 
@@ -62,6 +62,11 @@ enterprise-arch-agent/
 │   ├── domain/
 │   │   ├── __init__.py
 │   │   └── architecture_analysis.py
+│   ├── presentation/
+│   │   ├── __init__.py
+│   │   └── web/
+│   │       ├── __init__.py
+│   │       └── index.py         # browser UI for prompt entry and diagram preview
 │   ├── prompts/
 │   │   ├── __init__.py
 │   │   └── system.py
@@ -90,6 +95,7 @@ enterprise-arch-agent/
 - `app/services/diagram_generator.py`: Mermaid and draw.io XML generation from the architecture response
 - `app/services/memory_store.py`: persistence-backed agent memory using Cosmos DB, Table Storage, or Blob Storage
 - `app/domain`: enterprise architecture heuristics and analysis helpers
+- `app/presentation`: browser-facing UI assets and presentation layer content
 - `app/schemas`: Pydantic request/response models
 - `app/core`: runtime configuration and logging bootstrap
 - `app/prompts`: reusable system prompts and prompt assets
@@ -169,6 +175,12 @@ MEMORY_BLOB_CONTAINER_NAME=architecture-memory
 ## 5. Run locally
 
 ```bash
+.venv/bin/uvicorn app.main:app --reload
+```
+
+If you activated the virtual environment first, this also works:
+
+```bash
 uvicorn app.main:app --reload
 ```
 
@@ -183,9 +195,10 @@ Open:
 You can now use the built-in UI at `http://127.0.0.1:8000/` to:
 
 - enter an architecture prompt
-- generate a formatted recommendation on the right side
+- review the 9 architecture recommendation sections in dedicated UI cards
 - preview the generated draw.io diagram in the browser
-- download the report, Mermaid diagram, and draw.io XML
+- preview the generated PowerPoint slide in the browser
+- download the report, draw.io XML, and PowerPoint deck
 
 Or call the API directly with `POST /analyze`.
 
@@ -209,6 +222,9 @@ Sample response fields:
     "Azure Monitor",
     "Azure API Management"
   ],
+  "drawio_xml": "<mxfile host=\"app.diagrams.net\">...</mxfile>",
+  "pptx_base64": "<base64-encoded-pptx>",
+  "pptx_preview_svg": "<svg>...</svg>",
   "memory_record_id": "3ce3a640-0b2e-40f7-b0d7-a469b5f8e0c0",
   "memory_backend": "blob",
   "prior_recommendations": [
@@ -216,9 +232,7 @@ Sample response fields:
   ],
   "reusable_patterns": [
     "Synchronous APIs for customer-facing real-time interactions via Azure API Management"
-  ],
-  "mermaid_diagram": "flowchart LR\n    N1[\"Users / Channels\"]\n    ...",
-  "drawio_xml": "<mxfile host=\"app.diagrams.net\">...</mxfile>"
+  ]
 }
 ```
 

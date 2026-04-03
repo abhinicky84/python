@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
+from io import BytesIO
 import re
 from xml.sax.saxutils import escape
 
@@ -189,10 +191,36 @@ class DiagramGenerator:
         "governance": (6, 0),
     }
 
-    def generate(self, user_input: str, model_response: str, analysis: ArchitectureAnalysis) -> tuple[str, str]:
+    PPTX_NODE_FILL = {
+        "channels": "F5F7FB",
+        "experience": "FFF2CC",
+        "identity": "F4E9FF",
+        "integration": "DAE8FC",
+        "applications": "D5E8D4",
+        "systems": "F8CECC",
+        "data": "E1D5E7",
+        "observability": "E7EDF4",
+    }
+
+    PPTX_NODE_LINE = {
+        "channels": "64748B",
+        "experience": "D6B656",
+        "identity": "8B5CF6",
+        "integration": "6C8EBF",
+        "applications": "82B366",
+        "systems": "B85450",
+        "data": "9673A6",
+        "observability": "64748B",
+    }
+
+    def generate(self, user_input: str, model_response: str, analysis: ArchitectureAnalysis) -> tuple[str, str, str]:
         nodes = self._build_nodes(user_input, model_response, analysis)
         edges = self._build_edges(nodes)
-        return self._build_mermaid(nodes, edges), self._build_drawio_xml(nodes, edges)
+        return (
+            self._build_drawio_xml(nodes, edges),
+            self._build_pptx_base64(nodes, edges),
+            self._build_pptx_preview_svg(nodes, edges),
+        )
 
     def _build_nodes(
         self,
@@ -202,6 +230,7 @@ class DiagramGenerator:
     ) -> list[DiagramNode]:
         text = f"{user_input}\n{model_response}"
         nodes: list[DiagramNode] = []
+        cloud_provider = analysis.cloud_provider.casefold()
 
         self._add_node(nodes, "users", "Business Users", "channels")
         self._add_node(nodes, "web", "Web / Mobile Channels", "channels")
@@ -228,32 +257,32 @@ class DiagramGenerator:
         if not any(node.key == "aem" for node in nodes):
             self._add_node(nodes, "portal", "Digital Experience Portal", "experience")
 
-        self._add_node(nodes, "entra", "Microsoft Entra ID", "identity")
+        self._add_node(nodes, "entra", self._cloud_identity_label(cloud_provider), "identity")
         if self._mentions_any(text, ["private", "network", "private endpoint", "private link", "vnet", "secure"]):
             self._add_node(nodes, "network", "Private Network Boundary", "identity")
 
-        self._add_node(nodes, "apim", "Azure API Management", "integration")
+        self._add_node(nodes, "apim", self._cloud_api_management_label(cloud_provider), "integration")
         self._add_node(nodes, "api_gateway", "API Gateway", "integration")
         if self._mentions_any(text, ["api gateway", "gateway", "edge api"]):
             self._add_node(nodes, "edge_api", "Edge API Policies", "integration")
         if self._mentions_any(text, ["event", "async", "messaging", "queue", "service bus"]):
-            self._add_node(nodes, "service_bus", "Azure Service Bus", "integration")
+            self._add_node(nodes, "service_bus", self._cloud_messaging_label(cloud_provider), "integration")
         if self._mentions_any(text, ["event grid", "pub/sub", "webhook"]):
-            self._add_node(nodes, "event_grid", "Azure Event Grid", "integration")
+            self._add_node(nodes, "event_grid", self._cloud_eventing_label(cloud_provider), "integration")
         self._add_node(nodes, "orchestration", "Integration Orchestration", "integration")
 
-        if self._contains_service(analysis, "Azure Container Apps"):
-            self._add_node(nodes, "container_apps", "Azure Container Apps", "applications")
-        if self._contains_service(analysis, "Azure Kubernetes Service"):
-            self._add_node(nodes, "aks", "Azure Kubernetes Service", "applications")
+        if self._contains_any_service(analysis, ["Azure Container Apps", "AWS App Runner", "Cloud Run"]):
+            self._add_node(nodes, "container_apps", self._cloud_container_runtime_label(cloud_provider), "applications")
+        if self._contains_any_service(analysis, ["Azure Kubernetes Service", "Amazon EKS", "Google Kubernetes Engine"]):
+            self._add_node(nodes, "aks", self._cloud_kubernetes_label(cloud_provider), "applications")
         self._add_node(nodes, "domain_services", "Domain Services", "applications")
         self._add_node(nodes, "microservices", "Microservices", "applications")
         if self._mentions_any(text, ["microservice", "micro-service", "bounded context"]):
             self._add_node(nodes, "service_mesh", "Service-to-Service Policies", "applications")
         if self._mentions_any(text, ["soa", "service-oriented", "service oriented", "shared service"]):
             self._add_node(nodes, "shared_services", "Shared Enterprise Services", "applications")
-        if self._contains_service(analysis, "Azure AI Foundry"):
-            self._add_node(nodes, "ai_foundry", "Azure AI Foundry", "applications")
+        if self._contains_any_service(analysis, ["Azure AI Foundry", "Amazon Bedrock", "Vertex AI"]):
+            self._add_node(nodes, "ai_foundry", self._cloud_ai_platform_label(cloud_provider), "applications")
 
         if self._mentions_any(text, ["sap"]):
             self._add_node(nodes, "sap", self._extract_sap_label(text), "systems")
@@ -278,10 +307,16 @@ class DiagramGenerator:
         ) < 2:
             self._add_node(nodes, "lob", "Line-of-Business Systems", "systems")
 
-        if self._contains_any_service(analysis, ["Azure Storage or Cosmos DB", "Azure Storage", "Cosmos DB"]):
+        if self._contains_any_service(
+            analysis,
+            ["Azure Storage or Cosmos DB", "Azure Storage", "Cosmos DB", "Amazon S3 or DynamoDB", "Amazon S3", "Amazon DynamoDB", "Cloud Storage or Firestore", "Cloud Storage", "Firestore"],
+        ):
             self._add_node(nodes, "operational_data", "Operational Data Store", "data")
         self._add_node(nodes, "canonical_data", "Canonical Data Model", "data")
-        if self._contains_any_service(analysis, ["Azure Data Lake / Synapse / Fabric", "Synapse", "Fabric"]):
+        if self._contains_any_service(
+            analysis,
+            ["Azure Data Lake / Synapse / Fabric", "Synapse", "Fabric", "Amazon S3, Redshift, Glue", "Amazon Redshift", "BigQuery, Dataplex, Cloud Storage", "BigQuery", "Dataplex"],
+        ):
             self._add_node(nodes, "analytics", "Analytics & Reporting", "data")
         if self._mentions_any(text, ["personalization", "personalisation", "customer profile", "cdp"]):
             self._add_node(nodes, "customer_profile", "Customer Profile / CDP", "data")
@@ -291,16 +326,16 @@ class DiagramGenerator:
             self._add_node(nodes, "aep", "Adobe Experience Platform", "data")
         if self._mentions_any(text, ["rt-cdp", "rtcdp", "real-time cdp"]):
             self._add_node(nodes, "rt_cdp", "Adobe RT-CDP", "data")
-        if self._mentions_any(text, ["azure"]):
+        if cloud_provider == "azure" or self._mentions_any(text, ["azure"]):
             self._add_node(nodes, "azure_cloud", "Azure Platform", "data")
-        if self._mentions_any(text, ["aws"]):
-            self._add_node(nodes, "aws_cloud", "AWS Services", "data")
-        if self._mentions_any(text, ["gcp", "google cloud"]):
-            self._add_node(nodes, "gcp_cloud", "GCP Services", "data")
-        if self._contains_service(analysis, "Azure AI Search") or self._mentions_any(text, ["seo", "search", "discoverability"]):
+        if cloud_provider == "aws" or self._mentions_any(text, ["aws"]):
+            self._add_node(nodes, "aws_cloud", "AWS Platform", "data")
+        if cloud_provider == "gcp" or self._mentions_any(text, ["gcp", "google cloud"]):
+            self._add_node(nodes, "gcp_cloud", "GCP Platform", "data")
+        if self._contains_any_service(analysis, ["Azure AI Search", "Amazon OpenSearch Service", "Vertex AI Search"]) or self._mentions_any(text, ["seo", "search", "discoverability"]):
             self._add_node(nodes, "search_index", "Search / SEO Index", "data")
 
-        self._add_node(nodes, "monitor", "Azure Monitor", "observability")
+        self._add_node(nodes, "monitor", self._cloud_monitoring_label(cloud_provider), "observability")
         self._add_node(nodes, "governance", "Audit / Governance", "observability")
 
         return nodes
@@ -399,27 +434,6 @@ class DiagramGenerator:
             connect(governed, "governance", "Audit", style="dashed")
 
         return edges
-
-    def _build_mermaid(self, nodes: list[DiagramNode], edges: list[DiagramEdge]) -> str:
-        lines = ["flowchart LR"]
-
-        for category in self.CATEGORY_ORDER:
-            category_nodes = [node for node in nodes if node.category == category]
-            if not category_nodes:
-                continue
-            lines.append(f'    subgraph {category}["{self.CATEGORY_LABELS[category]}"]')
-            for node in category_nodes:
-                lines.append(f'        {node.key}["{self._escape_mermaid(node.label)}"]')
-            lines.append("    end")
-
-        for edge in edges:
-            connector = "-->" if edge.style == "solid" else "-.->"
-            lines.append(f"    {edge.source} {connector}|{self._escape_mermaid(edge.label)}| {edge.target}")
-
-        for category, style in self.CATEGORY_STYLES.items():
-            lines.append(f"    style {category} {style}")
-
-        return "\n".join(lines)
 
     def _build_drawio_xml(self, nodes: list[DiagramNode], edges: list[DiagramEdge]) -> str:
         node_map = {node.key: node for node in nodes}
@@ -521,6 +535,54 @@ class DiagramGenerator:
     def _contains_any_service(self, analysis: ArchitectureAnalysis, service_names: list[str]) -> bool:
         return any(name in service for service in analysis.suggested_azure_services for name in service_names)
 
+    def _cloud_identity_label(self, cloud_provider: str) -> str:
+        return {
+            "aws": "AWS IAM Identity Center",
+            "gcp": "Cloud Identity",
+        }.get(cloud_provider, "Microsoft Entra ID")
+
+    def _cloud_api_management_label(self, cloud_provider: str) -> str:
+        return {
+            "aws": "Amazon API Gateway",
+            "gcp": "Apigee",
+        }.get(cloud_provider, "Azure API Management")
+
+    def _cloud_messaging_label(self, cloud_provider: str) -> str:
+        return {
+            "aws": "Amazon SQS / SNS",
+            "gcp": "Pub/Sub",
+        }.get(cloud_provider, "Azure Service Bus")
+
+    def _cloud_eventing_label(self, cloud_provider: str) -> str:
+        return {
+            "aws": "Amazon EventBridge",
+            "gcp": "Eventarc",
+        }.get(cloud_provider, "Azure Event Grid")
+
+    def _cloud_container_runtime_label(self, cloud_provider: str) -> str:
+        return {
+            "aws": "AWS App Runner",
+            "gcp": "Cloud Run",
+        }.get(cloud_provider, "Azure Container Apps")
+
+    def _cloud_kubernetes_label(self, cloud_provider: str) -> str:
+        return {
+            "aws": "Amazon EKS",
+            "gcp": "Google Kubernetes Engine",
+        }.get(cloud_provider, "Azure Kubernetes Service")
+
+    def _cloud_ai_platform_label(self, cloud_provider: str) -> str:
+        return {
+            "aws": "Amazon Bedrock",
+            "gcp": "Vertex AI",
+        }.get(cloud_provider, "Azure AI Foundry")
+
+    def _cloud_monitoring_label(self, cloud_provider: str) -> str:
+        return {
+            "aws": "Amazon CloudWatch",
+            "gcp": "Cloud Monitoring",
+        }.get(cloud_provider, "Azure Monitor")
+
     def _mentions_any(self, text: str, terms: list[str]) -> bool:
         lowered = text.casefold()
         return any(term.casefold() in lowered for term in terms)
@@ -532,11 +594,8 @@ class DiagramGenerator:
         label = re.sub(r"\s+", " ", match.group(0)).strip()
         return label.upper() if label.casefold() == "sap" else label.replace("Sap", "SAP")
 
-    def _escape_mermaid(self, text: str) -> str:
-        return text.replace('"', "'")
-
     def _build_drawio_node_value(self, node: DiagramNode) -> str:
-        details = self.DRAWIO_NODE_DETAILS.get(node.key, [])
+        details = self._node_details(node.key, node.label)
         if not details:
             return node.label
 
@@ -554,7 +613,7 @@ class DiagramGenerator:
         return (edge.source, edge.target) in self.DRAWIO_PRIMARY_EDGE_LABELS
 
     def _build_drawio_compact_value(self, node: DiagramNode) -> str:
-        details = self.DRAWIO_NODE_DETAILS.get(node.key, [])
+        details = self._node_details(node.key, node.label)
         subtitle = " | ".join(details[:2])
         if not subtitle:
             return f"<div style='font-size:15px;font-weight:700;color:#0f172a;'>{escape(node.label)}</div>"
@@ -691,12 +750,17 @@ class DiagramGenerator:
             ("adobe_analytics", "analytics", "Adobe metrics", "solid"),
             ("aep", "customer_profile", "Experience profiles", "solid"),
             ("rt_cdp", "customer_profile", "Audience activation", "solid"),
-            ("azure_cloud", "analytics", "Azure data platform", "solid"),
-            ("gcp_cloud", "analytics", "GCP analytics", "solid"),
             ("analytics", "personalization", "Segments / models", "solid"),
             ("apim", "monitor", "Telemetry", "dashed"),
             ("canonical_data", "governance", "Audit", "dashed"),
         ]
+
+        if "azure_cloud" in node_ids:
+            preferred_edges.append(("azure_cloud", "analytics", "Azure data platform", "solid"))
+        if "aws_cloud" in node_ids:
+            preferred_edges.append(("aws_cloud", "analytics", "AWS data platform", "solid"))
+        if "gcp_cloud" in node_ids:
+            preferred_edges.append(("gcp_cloud", "analytics", "GCP analytics", "solid"))
 
         result: list[tuple[str, str, str, str]] = []
         for source_key, target_key, label, style in preferred_edges:
@@ -721,7 +785,7 @@ class DiagramGenerator:
         ]
 
         header_height = 42
-        details = self.DRAWIO_NODE_DETAILS.get(node.key, [])
+        details = self._node_details(node.key, node.label)
         body_style = self._drawio_group_body_style(node.category)
         tile_style = self._drawio_group_tile_style(node.category)
 
@@ -825,9 +889,465 @@ class DiagramGenerator:
             ("aep", "customer_profile"): "exitX=0.5;exitY=0;entryX=0.5;entryY=1;",
             ("rt_cdp", "customer_profile"): "exitX=0.5;exitY=0;entryX=0.8;entryY=1;",
             ("azure_cloud", "analytics"): "exitX=0.5;exitY=0;entryX=0.8;entryY=1;",
+            ("aws_cloud", "analytics"): "exitX=0;exitY=0.4;entryX=1;entryY=0.8;",
             ("gcp_cloud", "analytics"): "exitX=0;exitY=0.4;entryX=1;entryY=0.8;",
             ("analytics", "personalization"): "exitX=0;exitY=0.15;entryX=1;entryY=0.85;",
             ("apim", "monitor"): "exitX=0.7;exitY=1;entryX=0.5;entryY=0;",
             ("canonical_data", "governance"): "exitX=1;exitY=1;entryX=0;entryY=0.3;",
         }
         return anchor_map.get((source_key, target_key), "")
+
+    def _node_details(self, key: str, label: str) -> list[str]:
+        cloud_specific = {
+            "entra": {
+                "AWS IAM Identity Center": ["SSO", "SAML / OIDC", "Role-based access"],
+                "Cloud Identity": ["SSO", "OIDC / SAML", "Role-based access"],
+                "Microsoft Entra ID": ["SSO", "OAuth / OIDC", "Role-based access"],
+            },
+            "apim": {
+                "Amazon API Gateway": ["Policies", "Developer access", "Security enforcement"],
+                "Apigee": ["Policies", "Developer portal", "Security enforcement"],
+                "Azure API Management": ["Policies", "Developer access", "Security enforcement"],
+            },
+            "service_bus": {
+                "Amazon SQS / SNS": ["Queues", "Topics", "Reliable delivery"],
+                "Pub/Sub": ["Topics", "Subscriptions", "Reliable delivery"],
+                "Azure Service Bus": ["Queues", "Topics", "Reliable delivery"],
+            },
+            "event_grid": {
+                "Amazon EventBridge": ["Event routing", "Webhook fan-out", "Notifications"],
+                "Eventarc": ["Event routing", "Triggers", "Notifications"],
+                "Azure Event Grid": ["Event distribution", "Webhook fan-out", "Notifications"],
+            },
+            "container_apps": {
+                "AWS App Runner": ["Scalable runtime", "Managed revisions", "Service endpoints"],
+                "Cloud Run": ["Serverless runtime", "Managed revisions", "Service endpoints"],
+                "Azure Container Apps": ["Scalable runtime", "Revision rollout", "Service endpoints"],
+            },
+            "aks": {
+                "Amazon EKS": ["Kubernetes runtime", "Platform controls", "Advanced workloads"],
+                "Google Kubernetes Engine": ["Kubernetes runtime", "Platform controls", "Advanced workloads"],
+                "Azure Kubernetes Service": ["Kubernetes runtime", "Platform controls", "Advanced workloads"],
+            },
+            "ai_foundry": {
+                "Amazon Bedrock": ["Foundation models", "Guardrails", "AI orchestration"],
+                "Vertex AI": ["Models", "Pipelines", "AI orchestration"],
+                "Azure AI Foundry": ["Prompt flows", "Model access", "AI orchestration"],
+            },
+            "monitor": {
+                "Amazon CloudWatch": ["Metrics", "Logs", "Alerting"],
+                "Cloud Monitoring": ["Metrics", "Tracing", "Alerting"],
+                "Azure Monitor": ["Metrics", "Tracing", "Alerting"],
+            },
+            "azure_cloud": {"Azure Platform": ["App services", "Integration", "Data platform", "Identity"]},
+            "aws_cloud": {"AWS Platform": ["S3", "CloudFront", "Compute", "Messaging"]},
+            "gcp_cloud": {"GCP Platform": ["BigQuery", "Vertex AI", "Storage", "Data processing"]},
+        }
+        if key in cloud_specific:
+            return cloud_specific[key].get(label, self.DRAWIO_NODE_DETAILS.get(key, []))
+        return self.DRAWIO_NODE_DETAILS.get(key, [])
+
+    def _build_pptx_base64(self, nodes: list[DiagramNode], edges: list[DiagramEdge]) -> str:
+        from pptx import Presentation
+        from pptx.dml.color import RGBColor
+        from pptx.enum.dml import MSO_LINE_DASH_STYLE
+        from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE, MSO_CONNECTOR
+        from pptx.enum.text import PP_ALIGN
+        from pptx.util import Inches, Pt
+
+        prs = Presentation()
+        prs.slide_width = Inches(13.333)
+        prs.slide_height = Inches(7.5)
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+        title = slide.shapes.add_textbox(Inches(0.45), Inches(0.2), Inches(6.2), Inches(0.45))
+        title_tf = title.text_frame
+        title_tf.text = "Enterprise Architecture Overview"
+        title_run = title_tf.paragraphs[0].runs[0]
+        title_run.font.size = Pt(24)
+        title_run.font.bold = True
+        title_run.font.color.rgb = RGBColor(15, 23, 42)
+
+        subtitle = slide.shapes.add_textbox(Inches(0.45), Inches(0.58), Inches(7.6), Inches(0.3))
+        subtitle_tf = subtitle.text_frame
+        subtitle_tf.text = "Native PowerPoint architecture blueprint aligned to the draw.io solution layout"
+        subtitle_run = subtitle_tf.paragraphs[0].runs[0]
+        subtitle_run.font.size = Pt(10)
+        subtitle_run.font.color.rgb = RGBColor(100, 116, 139)
+
+        accent_bar = slide.shapes.add_shape(
+            MSO_AUTO_SHAPE_TYPE.RECTANGLE,
+            Inches(0.45),
+            Inches(0.98),
+            Inches(12.25),
+            Inches(0.05),
+        )
+        accent_bar.fill.solid()
+        accent_bar.fill.fore_color.rgb = RGBColor(51, 92, 255)
+        accent_bar.line.fill.background()
+        canvas = slide.shapes.add_shape(
+            MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+            Inches(0.42),
+            Inches(1.2),
+            Inches(12.45),
+            Inches(5.9),
+        )
+        canvas.fill.solid()
+        canvas.fill.fore_color.rgb = RGBColor(255, 255, 255)
+        canvas.line.color.rgb = RGBColor(226, 232, 240)
+        canvas.line.width = Pt(1)
+
+        page_width = 2700
+        page_height = 1450
+        slide_width = 13.333
+        slide_height = 7.5
+        scale_x = slide_width / page_width
+        scale_y = (slide_height - 1.12) / page_height
+        x_offset = 0.52
+        y_offset = 1.26
+        node_map = {node.key: node for node in nodes}
+        display_keys = [key for key in self._drawio_display_node_keys() if key in node_map]
+        ppt_shapes: dict[str, object] = {}
+
+        for heading, x, y in self._drawio_section_headings():
+            heading_box = slide.shapes.add_textbox(
+                Inches(x_offset + (x * scale_x)),
+                Inches(y_offset + (y * scale_y) - 0.16),
+                Inches(1.4),
+                Inches(0.18),
+            )
+            heading_tf = heading_box.text_frame
+            heading_tf.text = heading
+            run = heading_tf.paragraphs[0].runs[0]
+            run.font.size = Pt(8)
+            run.font.bold = True
+            run.font.color.rgb = RGBColor(71, 85, 105)
+
+        for key in display_keys:
+            node = node_map[key]
+            x, y, width, height = self._drawio_node_geometry(key)
+            left = x_offset + (x * scale_x)
+            top = y_offset + (y * scale_y)
+            scaled_width = max(0.38, width * scale_x)
+            scaled_height = max(0.32, height * scale_y)
+
+            if key in {"users", "partners"}:
+                head = slide.shapes.add_shape(
+                    MSO_AUTO_SHAPE_TYPE.OVAL,
+                    Inches(left + (scaled_width * 0.2)),
+                    Inches(top),
+                    Inches(max(0.12, scaled_width * 0.6)),
+                    Inches(max(0.12, scaled_width * 0.6)),
+                )
+                head.fill.solid()
+                head.fill.fore_color.rgb = RGBColor(255, 255, 255)
+                head.line.color.rgb = RGBColor(71, 85, 105)
+                head.line.width = Pt(1)
+
+                body = slide.shapes.add_connector(
+                    MSO_CONNECTOR.STRAIGHT,
+                    int(Inches(left + (scaled_width / 2))),
+                    int(Inches(top + (scaled_width * 0.6))),
+                    int(Inches(left + (scaled_width / 2))),
+                    int(Inches(top + scaled_height * 0.7)),
+                )
+                body.line.color.rgb = RGBColor(71, 85, 105)
+                body.line.width = Pt(1)
+
+                arms = slide.shapes.add_connector(
+                    MSO_CONNECTOR.STRAIGHT,
+                    int(Inches(left + scaled_width * 0.12)),
+                    int(Inches(top + scaled_height * 0.42)),
+                    int(Inches(left + scaled_width * 0.88)),
+                    int(Inches(top + scaled_height * 0.42)),
+                )
+                arms.line.color.rgb = RGBColor(71, 85, 105)
+                arms.line.width = Pt(1)
+
+                leg_left = slide.shapes.add_connector(
+                    MSO_CONNECTOR.STRAIGHT,
+                    int(Inches(left + (scaled_width / 2))),
+                    int(Inches(top + scaled_height * 0.7)),
+                    int(Inches(left + scaled_width * 0.18)),
+                    int(Inches(top + scaled_height)),
+                )
+                leg_left.line.color.rgb = RGBColor(71, 85, 105)
+                leg_left.line.width = Pt(1)
+
+                leg_right = slide.shapes.add_connector(
+                    MSO_CONNECTOR.STRAIGHT,
+                    int(Inches(left + (scaled_width / 2))),
+                    int(Inches(top + scaled_height * 0.7)),
+                    int(Inches(left + scaled_width * 0.82)),
+                    int(Inches(top + scaled_height)),
+                )
+                leg_right.line.color.rgb = RGBColor(71, 85, 105)
+                leg_right.line.width = Pt(1)
+
+                title_box = slide.shapes.add_textbox(
+                    Inches(max(0.1, left - 0.25)),
+                    Inches(top + scaled_height + 0.06),
+                    Inches(scaled_width + 0.5),
+                    Inches(0.24),
+                )
+                title_tf = title_box.text_frame
+                title_tf.clear()
+                title_p = title_tf.paragraphs[0]
+                title_p.alignment = PP_ALIGN.CENTER
+                title_run = title_p.add_run()
+                title_run.text = node.label
+                title_run.font.size = Pt(8.5)
+                title_run.font.bold = True
+                title_run.font.color.rgb = RGBColor(15, 23, 42)
+
+                ppt_shapes[key] = {
+                    "left": left,
+                    "top": top,
+                    "width": scaled_width,
+                    "height": scaled_height,
+                }
+                continue
+
+            outer = slide.shapes.add_shape(
+                MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+                Inches(left),
+                Inches(top),
+                Inches(scaled_width),
+                Inches(scaled_height),
+            )
+            outer.fill.solid()
+            outer.fill.fore_color.rgb = RGBColor.from_string(self.PPTX_NODE_FILL[node.category])
+            outer.line.color.rgb = RGBColor.from_string(self.PPTX_NODE_LINE[node.category])
+            outer.line.width = Pt(1.1)
+
+            title_box = slide.shapes.add_textbox(
+                Inches(left + 0.05),
+                Inches(top + 0.04),
+                Inches(max(0.25, scaled_width - 0.1)),
+                Inches(0.2),
+            )
+            title_tf = title_box.text_frame
+            title_tf.clear()
+            title_p = title_tf.paragraphs[0]
+            title_p.alignment = PP_ALIGN.CENTER
+            title_run = title_p.add_run()
+            title_run.text = node.label
+            title_run.font.size = Pt(8.8)
+            title_run.font.bold = True
+            title_run.font.color.rgb = RGBColor(15, 23, 42)
+
+            details = self._node_details(key, node.label)[:4]
+            if details:
+                detail_columns = 2 if scaled_width > 0.95 else 1
+                tile_gap = 0.05
+                inner_left = left + 0.05
+                inner_top = top + 0.26
+                tile_width = (scaled_width - 0.1 - ((detail_columns - 1) * tile_gap)) / detail_columns
+                tile_height = 0.16
+                for index, detail in enumerate(details):
+                    col = index % detail_columns
+                    row = index // detail_columns
+                    tile_left = inner_left + (col * (tile_width + tile_gap))
+                    tile_top = inner_top + (row * (tile_height + 0.04))
+                    if tile_top + tile_height > top + scaled_height - 0.03:
+                        break
+                    tile = slide.shapes.add_shape(
+                        MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+                        Inches(tile_left),
+                        Inches(tile_top),
+                        Inches(max(0.18, tile_width)),
+                        Inches(tile_height),
+                    )
+                    tile.fill.solid()
+                    tile.fill.fore_color.rgb = RGBColor(255, 255, 255)
+                    tile.line.fill.background()
+                    tile_tf = tile.text_frame
+                    tile_tf.clear()
+                    tile_p = tile_tf.paragraphs[0]
+                    tile_p.alignment = PP_ALIGN.CENTER
+                    tile_run = tile_p.add_run()
+                    tile_run.text = detail
+                    tile_run.font.size = Pt(6)
+                    tile_run.font.color.rgb = RGBColor(51, 65, 85)
+
+            ppt_shapes[key] = {
+                "left": left,
+                "top": top,
+                "width": scaled_width,
+                "height": scaled_height,
+            }
+
+        node_ids = {key: key for key in display_keys}
+        for source_key, target_key, label, style in self._drawio_edge_specs(node_ids):
+            source = ppt_shapes.get(source_key)
+            target = ppt_shapes.get(target_key)
+            if not source or not target:
+                continue
+            start_x = source["left"] + source["width"]
+            start_y = source["top"] + (source["height"] / 2)
+            end_x = target["left"]
+            end_y = target["top"] + (target["height"] / 2)
+            if target["left"] > source["left"] + source["width"]:
+                start_x = source["left"] + source["width"]
+                end_x = target["left"]
+            elif source["left"] > target["left"] + target["width"]:
+                start_x = source["left"]
+                end_x = target["left"] + target["width"]
+            elif target["top"] > source["top"]:
+                start_x = source["left"] + (source["width"] / 2)
+                start_y = source["top"] + source["height"]
+                end_x = target["left"] + (target["width"] / 2)
+                end_y = target["top"]
+            else:
+                start_x = source["left"] + (source["width"] / 2)
+                start_y = source["top"]
+                end_x = target["left"] + (target["width"] / 2)
+                end_y = target["top"] + target["height"]
+            connector = slide.shapes.add_connector(
+                MSO_CONNECTOR.ELBOW,
+                int(Inches(start_x)),
+                int(Inches(start_y)),
+                int(Inches(end_x)),
+                int(Inches(end_y)),
+            )
+            connector.line.color.rgb = RGBColor(91, 100, 120)
+            connector.line.width = Pt(1.0)
+            if style == "dashed":
+                connector.line.dash_style = MSO_LINE_DASH_STYLE.DASH
+            if label:
+                label_left = min(start_x, end_x) + (abs(end_x - start_x) / 2) - 0.45
+                label_top = min(start_y, end_y) + (abs(end_y - start_y) / 2) - 0.08
+                label_chip = slide.shapes.add_shape(
+                    MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+                    Inches(label_left),
+                    Inches(label_top),
+                    Inches(0.9),
+                    Inches(0.18),
+                )
+                label_chip.fill.solid()
+                label_chip.fill.fore_color.rgb = RGBColor(255, 255, 255)
+                label_chip.line.fill.background()
+                label_box = slide.shapes.add_textbox(Inches(label_left), Inches(label_top + 0.005), Inches(0.9), Inches(0.16))
+                label_tf = label_box.text_frame
+                label_tf.clear()
+                label_p = label_tf.paragraphs[0]
+                label_p.alignment = PP_ALIGN.CENTER
+                label_run = label_p.add_run()
+                label_run.text = label
+                label_run.font.size = Pt(6.5)
+                label_run.font.color.rgb = RGBColor(71, 85, 105)
+
+        buffer = BytesIO()
+        prs.save(buffer)
+        return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+    def _build_pptx_preview_svg(self, nodes: list[DiagramNode], edges: list[DiagramEdge]) -> str:
+        width = 1600
+        height = 900
+        page_width = 2700
+        page_height = 1450
+        node_map = {node.key: node for node in nodes}
+        display_keys = [key for key in self._drawio_display_node_keys() if key in node_map]
+        scale_x = 1450 / page_width
+        scale_y = 700 / page_height
+        x_offset = 70
+        y_offset = 150
+        svg_parts = [
+            f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Generated PowerPoint slide preview">',
+            f'<rect x="0" y="0" width="{width}" height="{height}" rx="22" fill="#f8fbff" stroke="#d7def3" stroke-width="2"></rect>',
+            '<text x="42" y="44" font-size="28" font-weight="700" font-family="Segoe UI, Arial, sans-serif" fill="#0f172a">Enterprise Architecture Overview</text>',
+            '<text x="42" y="70" font-size="13" font-family="Segoe UI, Arial, sans-serif" fill="#64748b">Native PowerPoint architecture blueprint aligned to the draw.io solution layout</text>',
+            '<rect x="42" y="92" width="1510" height="6" rx="3" fill="#335cff"></rect>',
+            '<rect x="52" y="132" width="1490" height="730" rx="24" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"></rect>',
+        ]
+
+        for heading, x, y in self._drawio_section_headings():
+            svg_parts.append(
+                f'<text x="{x_offset + (x * scale_x)}" y="{y_offset + (y * scale_y) - 10}" font-size="10" font-weight="700" font-family="Segoe UI, Arial, sans-serif" fill="#475569">{escape(heading)}</text>'
+            )
+
+        positions: dict[str, tuple[float, float, float, float]] = {}
+        for key in display_keys:
+            node = node_map[key]
+            x, y, w, h = self._drawio_node_geometry(key)
+            sx = x_offset + (x * scale_x)
+            sy = y_offset + (y * scale_y)
+            sw = max(36, w * scale_x)
+            sh = max(30, h * scale_y)
+            positions[key] = (sx, sy, sw, sh)
+            fill = f'#{self.PPTX_NODE_FILL[node.category]}'
+            stroke = f'#{self.PPTX_NODE_LINE[node.category]}'
+            svg_parts.append(f'<rect x="{sx}" y="{sy}" width="{sw}" height="{sh}" rx="16" fill="{fill}" stroke="{stroke}" stroke-width="2"></rect>')
+            svg_parts.append(
+                f'<text x="{sx + sw / 2}" y="{sy + 20}" text-anchor="middle" font-size="10.5" font-weight="700" font-family="Segoe UI, Arial, sans-serif" fill="#0f172a">{escape(node.label)}</text>'
+            )
+            details = self._node_details(key, node.label)[:4]
+            if details:
+                columns = 2 if sw > 120 else 1
+                tile_gap = 6
+                tile_width = (sw - 16 - ((columns - 1) * tile_gap)) / columns
+                for index, detail in enumerate(details):
+                    col = index % columns
+                    row = index // columns
+                    tile_x = sx + 8 + (col * (tile_width + tile_gap))
+                    tile_y = sy + 28 + (row * 24)
+                    if tile_y + 18 > sy + sh - 4:
+                        break
+                    svg_parts.append(f'<rect x="{tile_x}" y="{tile_y}" width="{tile_width}" height="18" rx="8" fill="#ffffff" opacity="0.94"></rect>')
+                    svg_parts.append(
+                        f'<text x="{tile_x + tile_width / 2}" y="{tile_y + 12}" text-anchor="middle" font-size="6.8" font-family="Segoe UI, Arial, sans-serif" fill="#334155">{escape(detail)}</text>'
+                    )
+
+        for source_key, target_key, label, style in self._drawio_edge_specs({key: key for key in display_keys}):
+            source = positions.get(source_key)
+            target = positions.get(target_key)
+            if not source or not target:
+                continue
+            start_x = source[0] + source[2]
+            start_y = source[1] + (source[3] / 2)
+            end_x = target[0]
+            end_y = target[1] + (target[3] / 2)
+            mid_x = (start_x + end_x) / 2
+            dash = ' stroke-dasharray="8 7"' if style == "dashed" else ""
+            svg_parts.append(
+                f'<path d="M {start_x} {start_y} L {mid_x} {start_y} L {mid_x} {end_y} L {end_x} {end_y}" fill="none" stroke="#5b6478" stroke-width="2"{dash}></path>'
+            )
+            if label:
+                label_x = mid_x - 42
+                label_y = ((start_y + end_y) / 2) - 10
+                svg_parts.append(f'<rect x="{label_x}" y="{label_y}" width="84" height="18" rx="8" fill="rgba(255,255,255,0.96)"></rect>')
+                svg_parts.append(
+                    f'<text x="{mid_x}" y="{label_y + 12}" text-anchor="middle" font-size="7" font-family="Segoe UI, Arial, sans-serif" fill="#475569">{escape(label)}</text>'
+                )
+
+        svg_parts.append("</svg>")
+        return "".join(svg_parts)
+
+    def _pptx_category_groups(self, nodes: list[DiagramNode]) -> list[dict[str, object]]:
+        groups: list[dict[str, object]] = []
+        for category in self.CATEGORY_ORDER:
+            category_nodes = [node for node in nodes if node.category == category]
+            if not category_nodes:
+                continue
+            groups.append(
+                {
+                    "category": category,
+                    "label": self.CATEGORY_LABELS[category],
+                    "nodes": category_nodes[:5],
+                }
+            )
+        return groups
+
+    def _pptx_flow_ribbons(self, edges: list[DiagramEdge]) -> list[str]:
+        ribbons: list[str] = []
+        seen: set[str] = set()
+        for edge in edges:
+            cleaned = edge.label.strip()
+            if not cleaned:
+                continue
+            key = cleaned.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            ribbons.append(cleaned)
+        return ribbons[:5]

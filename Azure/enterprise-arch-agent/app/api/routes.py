@@ -1,20 +1,25 @@
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import HTMLResponse
 
 from app.agents.enterprise_architecture import EnterpriseArchitectureAgent
 from app.core.config import get_settings
+from app.presentation.web import INDEX_HTML
 from app.schemas.architecture import AnalyzeResponse, ArchitectureRequest
-from app.ui import INDEX_HTML
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 settings = get_settings()
-agent = EnterpriseArchitectureAgent()
+
+
+@lru_cache(maxsize=1)
+def get_agent() -> EnterpriseArchitectureAgent:
+    return EnterpriseArchitectureAgent()
 
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -33,7 +38,7 @@ def health() -> dict[str, str]:
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(req: ArchitectureRequest) -> AnalyzeResponse:
     try:
-        return agent.analyze(req.prompt)
+        return get_agent().analyze(req.prompt, req.cloud_provider)
     except ValueError as exc:
         logger.warning("Request could not be processed: %s", exc)
         raise HTTPException(
