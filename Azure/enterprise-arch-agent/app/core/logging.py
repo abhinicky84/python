@@ -6,8 +6,6 @@ from app.core.config import get_settings
 
 
 def configure_logging() -> None:
-    settings = get_settings()
-    logging.basicConfig(
-        level=settings.log_level,
-        format="%(asctime)s %(levelname)s %(name)s - %(message)s",
-    )
+    get_settings()
+    logging.basicConfig(level=logging.CRITICAL, force=True)
+    logging.disable(logging.CRITICAL)

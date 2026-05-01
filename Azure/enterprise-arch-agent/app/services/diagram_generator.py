@@ -337,6 +337,7 @@ class DiagramGenerator:
 
         self._add_node(nodes, "monitor", self._cloud_monitoring_label(cloud_provider), "observability")
         self._add_node(nodes, "governance", "Audit / Governance", "observability")
+        self._add_runtime_nodes(nodes, analysis)
 
         return nodes
 
@@ -437,7 +438,8 @@ class DiagramGenerator:
 
     def _build_drawio_xml(self, nodes: list[DiagramNode], edges: list[DiagramEdge]) -> str:
         node_map = {node.key: node for node in nodes}
-        display_keys = [key for key in self._drawio_display_node_keys() if key in node_map]
+        display_keys = [node.key for node in self._ordered_nodes(nodes)]
+        geometry_map = self._layout_node_geometry(nodes)
         page_width = 2700
         page_height = 1450
 
@@ -469,7 +471,7 @@ class DiagramGenerator:
         node_ids: dict[str, str] = {}
         for key in display_keys:
             node = node_map[key]
-            x, y, width, height = self._drawio_node_geometry(key)
+            x, y, width, height = geometry_map[key]
 
             if key in {"users", "partners"}:
                 cell_id = f"node-{key}"
@@ -492,14 +494,17 @@ class DiagramGenerator:
             lines.extend(self._build_drawio_grouped_node(group_id, body_id, node, x, y, width, height))
 
         edge_index = 1
-        for source, target, label, style in self._drawio_edge_specs(node_ids):
+        for edge in edges:
+            source = node_ids.get(edge.source)
+            target = node_ids.get(edge.target)
+            if not source or not target:
+                continue
             edge_style = (
                 "edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;"
                 "html=1;endArrow=block;strokeWidth=1.6;"
             )
-            edge_style += "dashed=1;strokeColor=#94a3b8;" if style == "dashed" else "strokeColor=#475569;"
-            edge_style += self._drawio_edge_anchor_style(source, target, node_ids)
-            value = escape(label) if label else ""
+            edge_style += "dashed=1;strokeColor=#94a3b8;" if edge.style == "dashed" else "strokeColor=#475569;"
+            value = escape(edge.label) if edge.label else ""
             if value:
                 edge_style += "fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;"
             lines.extend(
@@ -526,8 +531,101 @@ class DiagramGenerator:
             return
         nodes.append(DiagramNode(key=key, label=label, category=category))
 
+    def _add_runtime_nodes(self, nodes: list[DiagramNode], analysis: ArchitectureAnalysis) -> None:
+        existing_labels = {node.label.casefold() for node in nodes}
+        for raw_label in [*analysis.tools_and_technologies, *analysis.suggested_azure_services]:
+            label = re.sub(r"\s+", " ", (raw_label or "").strip())
+            if not label or label.casefold() in existing_labels:
+                continue
+            category = self._categorize_runtime_label(label)
+            key = self._runtime_node_key(label, category, nodes)
+            self._add_node(nodes, key, label, category)
+            existing_labels.add(label.casefold())
+
+    def _categorize_runtime_label(self, label: str) -> str:
+        lowered = label.casefold()
+        if any(token in lowered for token in ("identity", "iam", "entra", "auth", "sso", "key vault", "secret manager")):
+            return "identity"
+        if any(token in lowered for token in ("api", "gateway", "event", "pub/sub", "queue", "sns", "sqs", "service bus", "integration", "apigee")):
+            return "integration"
+        if any(token in lowered for token in ("kubernetes", "aks", "eks", "gke", "container", "run", "app runner", "bedrock", "vertex ai", "ai foundry")):
+            return "applications"
+        if any(token in lowered for token in ("storage", "database", "cosmos", "dynamodb", "firestore", "bigquery", "redshift", "fabric", "synapse", "analytics", "search", "opensearch")):
+            return "data"
+        if any(token in lowered for token in ("aem", "adobe", "commerce", "target", "cdn", "front door", "cloudfront")):
+            return "experience"
+        if any(token in lowered for token in ("sap", "salesforce", "crm", "erp", "platform")):
+            return "systems"
+        if any(token in lowered for token in ("monitor", "logging", "log analytics", "cloudwatch", "observability")):
+            return "observability"
+        return "applications"
+
+    def _runtime_node_key(self, label: str, category: str, nodes: list[DiagramNode]) -> str:
+        base = re.sub(r"[^a-z0-9]+", "_", label.casefold()).strip("_") or category
+        key = f"{category}_{base}"
+        suffix = 2
+        existing = {node.key for node in nodes}
+        while key in existing:
+            key = f"{category}_{base}_{suffix}"
+            suffix += 1
+        return key
+
     def _node_keys(self, nodes: list[DiagramNode], category: str) -> list[str]:
         return [node.key for node in nodes if node.category == category]
+
+    def _ordered_nodes(self, nodes: list[DiagramNode]) -> list[DiagramNode]:
+        category_rank = {category: index for index, category in enumerate(self.CATEGORY_ORDER)}
+        return sorted(nodes, key=lambda node: (category_rank.get(node.category, 999), node.label.casefold()))
+
+    def _layout_node_geometry(self, nodes: list[DiagramNode]) -> dict[str, tuple[int, int, int, int]]:
+        category_positions = {
+            "channels": (70, 180),
+            "experience": (360, 180),
+            "identity": (710, 180),
+            "integration": (970, 180),
+            "applications": (1280, 180),
+            "systems": (1640, 180),
+            "data": (1080, 760),
+            "observability": (1710, 760),
+        }
+        category_widths = {
+            "channels": 220,
+            "experience": 260,
+            "identity": 220,
+            "integration": 250,
+            "applications": 300,
+            "systems": 280,
+            "data": 280,
+            "observability": 230,
+        }
+        category_heights = {
+            "channels": 90,
+            "experience": 126,
+            "identity": 110,
+            "integration": 120,
+            "applications": 120,
+            "systems": 120,
+            "data": 110,
+            "observability": 90,
+        }
+        geometry: dict[str, tuple[int, int, int, int]] = {}
+        category_counts: dict[str, int] = {category: 0 for category in self.CATEGORY_ORDER}
+        for node in self._ordered_nodes(nodes):
+            count = category_counts.get(node.category, 0)
+            base_x, base_y = category_positions.get(node.category, (150, 200))
+            width = category_widths.get(node.category, 220)
+            height = category_heights.get(node.category, 110)
+            columns = 2 if node.category in {"experience", "applications", "systems", "data"} else 1
+            column = count % columns
+            row = count // columns
+            x = base_x + (column * (width + 24))
+            y = base_y + (row * (height + 32))
+            if node.key in {"users", "partners"}:
+                width = 46
+                height = 82
+            geometry[node.key] = (x, y, width, height)
+            category_counts[node.category] = count + 1
+        return geometry
 
     def _contains_service(self, analysis: ArchitectureAnalysis, service_name: str) -> bool:
         return any(service_name in service for service in analysis.suggested_azure_services)
@@ -945,7 +1043,20 @@ class DiagramGenerator:
         }
         if key in cloud_specific:
             return cloud_specific[key].get(label, self.DRAWIO_NODE_DETAILS.get(key, []))
-        return self.DRAWIO_NODE_DETAILS.get(key, [])
+        if key in self.DRAWIO_NODE_DETAILS:
+            return self.DRAWIO_NODE_DETAILS.get(key, [])
+        lowered = label.casefold()
+        if any(token in lowered for token in ("api", "gateway", "apigee", "integration", "event", "queue", "topic")):
+            return ["Contracts", "Security", "Routing"]
+        if any(token in lowered for token in ("storage", "database", "analytics", "search", "index", "lake", "warehouse")):
+            return ["Data store", "Query access", "Governance"]
+        if any(token in lowered for token in ("kubernetes", "container", "run", "app runner", "compute", "bedrock", "vertex")):
+            return ["Runtime", "Scaling", "Operations"]
+        if any(token in lowered for token in ("identity", "auth", "entra", "iam", "secret", "vault")):
+            return ["Identity", "Access control", "Secrets"]
+        if any(token in lowered for token in ("commerce", "adobe", "cms", "experience", "target")):
+            return ["Business capability", "Customer journeys", "Integration points"]
+        return ["Core capability", "Enterprise integration", "Operations"]
 
     def _build_pptx_base64(self, nodes: list[DiagramNode], edges: list[DiagramEdge]) -> str:
         from pptx import Presentation
@@ -1006,7 +1117,8 @@ class DiagramGenerator:
         x_offset = 0.52
         y_offset = 1.26
         node_map = {node.key: node for node in nodes}
-        display_keys = [key for key in self._drawio_display_node_keys() if key in node_map]
+        display_keys = [node.key for node in self._ordered_nodes(nodes)]
+        geometry_map = self._layout_node_geometry(nodes)
         ppt_shapes: dict[str, object] = {}
 
         for heading, x, y in self._drawio_section_headings():
@@ -1025,7 +1137,7 @@ class DiagramGenerator:
 
         for key in display_keys:
             node = node_map[key]
-            x, y, width, height = self._drawio_node_geometry(key)
+            x, y, width, height = geometry_map[key]
             left = x_offset + (x * scale_x)
             top = y_offset + (y * scale_y)
             scaled_width = max(0.38, width * scale_x)
@@ -1177,10 +1289,9 @@ class DiagramGenerator:
                 "height": scaled_height,
             }
 
-        node_ids = {key: key for key in display_keys}
-        for source_key, target_key, label, style in self._drawio_edge_specs(node_ids):
-            source = ppt_shapes.get(source_key)
-            target = ppt_shapes.get(target_key)
+        for edge in edges:
+            source = ppt_shapes.get(edge.source)
+            target = ppt_shapes.get(edge.target)
             if not source or not target:
                 continue
             start_x = source["left"] + source["width"]
@@ -1212,9 +1323,9 @@ class DiagramGenerator:
             )
             connector.line.color.rgb = RGBColor(91, 100, 120)
             connector.line.width = Pt(1.0)
-            if style == "dashed":
+            if edge.style == "dashed":
                 connector.line.dash_style = MSO_LINE_DASH_STYLE.DASH
-            if label:
+            if edge.label:
                 label_left = min(start_x, end_x) + (abs(end_x - start_x) / 2) - 0.45
                 label_top = min(start_y, end_y) + (abs(end_y - start_y) / 2) - 0.08
                 label_chip = slide.shapes.add_shape(
@@ -1233,7 +1344,7 @@ class DiagramGenerator:
                 label_p = label_tf.paragraphs[0]
                 label_p.alignment = PP_ALIGN.CENTER
                 label_run = label_p.add_run()
-                label_run.text = label
+                label_run.text = edge.label
                 label_run.font.size = Pt(6.5)
                 label_run.font.color.rgb = RGBColor(71, 85, 105)
 
@@ -1247,7 +1358,8 @@ class DiagramGenerator:
         page_width = 2700
         page_height = 1450
         node_map = {node.key: node for node in nodes}
-        display_keys = [key for key in self._drawio_display_node_keys() if key in node_map]
+        display_keys = [node.key for node in self._ordered_nodes(nodes)]
+        geometry_map = self._layout_node_geometry(nodes)
         scale_x = 1450 / page_width
         scale_y = 700 / page_height
         x_offset = 70
@@ -1269,7 +1381,7 @@ class DiagramGenerator:
         positions: dict[str, tuple[float, float, float, float]] = {}
         for key in display_keys:
             node = node_map[key]
-            x, y, w, h = self._drawio_node_geometry(key)
+            x, y, w, h = geometry_map[key]
             sx = x_offset + (x * scale_x)
             sy = y_offset + (y * scale_y)
             sw = max(36, w * scale_x)
@@ -1298,9 +1410,9 @@ class DiagramGenerator:
                         f'<text x="{tile_x + tile_width / 2}" y="{tile_y + 12}" text-anchor="middle" font-size="6.8" font-family="Segoe UI, Arial, sans-serif" fill="#334155">{escape(detail)}</text>'
                     )
 
-        for source_key, target_key, label, style in self._drawio_edge_specs({key: key for key in display_keys}):
-            source = positions.get(source_key)
-            target = positions.get(target_key)
+        for edge in edges:
+            source = positions.get(edge.source)
+            target = positions.get(edge.target)
             if not source or not target:
                 continue
             start_x = source[0] + source[2]
@@ -1308,16 +1420,16 @@ class DiagramGenerator:
             end_x = target[0]
             end_y = target[1] + (target[3] / 2)
             mid_x = (start_x + end_x) / 2
-            dash = ' stroke-dasharray="8 7"' if style == "dashed" else ""
+            dash = ' stroke-dasharray="8 7"' if edge.style == "dashed" else ""
             svg_parts.append(
                 f'<path d="M {start_x} {start_y} L {mid_x} {start_y} L {mid_x} {end_y} L {end_x} {end_y}" fill="none" stroke="#5b6478" stroke-width="2"{dash}></path>'
             )
-            if label:
+            if edge.label:
                 label_x = mid_x - 42
                 label_y = ((start_y + end_y) / 2) - 10
                 svg_parts.append(f'<rect x="{label_x}" y="{label_y}" width="84" height="18" rx="8" fill="rgba(255,255,255,0.96)"></rect>')
                 svg_parts.append(
-                    f'<text x="{mid_x}" y="{label_y + 12}" text-anchor="middle" font-size="7" font-family="Segoe UI, Arial, sans-serif" fill="#475569">{escape(label)}</text>'
+                    f'<text x="{mid_x}" y="{label_y + 12}" text-anchor="middle" font-size="7" font-family="Segoe UI, Arial, sans-serif" fill="#475569">{escape(edge.label)}</text>'
                 )
 
         svg_parts.append("</svg>")
